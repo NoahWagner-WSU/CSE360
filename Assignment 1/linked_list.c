@@ -6,24 +6,46 @@ ASSIGNMENT:
 DESC:
 */
 
-#include "list.h"
+#include <stdlib.h>
+#include "linked_list.h"
 
 void linked_list_init(linked_list_t *list) {
-
+	list->length = 0;
+	list->sent = NULL;
 }
 
-void *linked_list_get_data(linked_list_t *list, int index) {
+int linked_list_add(linked_list_t *list, void *data) {
+	// allocate space for new node
+	linked_list_node_t *new_node = (linked_list_node_t *) malloc(sizeof(linked_list_node_t));
 
-}
+	// if allocation failed, return error code 1
+	if (new_node == NULL) return 1;
 
-int linked_list_append(linked_list_t *list, void *data) {
+	// insert the new node to the beginning of the list
+	new_node->next = list->sent;
+	list->sent = new_node;
 
-}
+	// set the node data
+	new_node->data = data;
 
-void linked_list_map(linked_list_t *list, (void)(*function)(void *)) {
+	// add 1 to the lists length
+	list->length++;
 
+	return 0;
 }
 
 void linked_list_free(linked_list_t *list) {
+	linked_list_node_t *prev_node = NULL;
+	linked_list_node_t *curr_node = list->sent;
 
+	// iterate over every node
+	while (curr_node != NULL) {
+		// increment both the previous and current node
+		prev_node = curr_node;
+		curr_node = curr_node->next;
+
+		// free the previous node
+		free(prev_node->data);
+		free(prev_node);
+	}
 }

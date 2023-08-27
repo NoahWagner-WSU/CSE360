@@ -6,11 +6,12 @@
 // NOTE: don't forget to add comments
 
 // NOTE: no hash_remove functions (removes single key value pairs) since there is no need for it in this program (maybe add later if needed?)
+typedef struct hash_table hash_table_t;
 
-typedef struct {
+struct hash_table {
 	linked_list_t *buckets;
 	int bucket_count;
-} hash_table_t;
+};
 
 // allocates memory for the initial size of the heap (with empty linked lists)
 int hash_table_init(hash_table_t *hash_table);
