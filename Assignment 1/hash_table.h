@@ -23,15 +23,16 @@ struct hash_table_kv {
 
 /*
 Description
-	initializes the heap, allocates memory for the initial size
+	initializes the heap, allocates memory for the specified initial_size
 
 Params
 	hash_table: a pointer to the table to initialize
+	initial_size: the initial size of the hash table
 
 Return
 	0 on success, 1 on failure to allocate
 */
-int hash_table_init(hash_table_t *hash_table);
+int hash_table_init(hash_table_t *hash_table, int initial_size);
 
 /*
 Description

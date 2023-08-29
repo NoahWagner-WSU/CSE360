@@ -13,22 +13,106 @@ DESC:
 #include "crc64.h"
 
 #define GROWTH_FACTOR 3
-#define INITIAL_SIZE 24
+#define LOAD_FACTOR 0.75
 
-// rehashes the whole hash_table to be GROWTH_FACTOR times the size
-static int rehash_table(hash_table_t *hash_table) {
+/*
+Description
+	adds the key value pair to the hash table, assumes the key isn't 
+	already in the table
 
+Params
+	hash_table: the hash table to add the key value pair to
+	key: a string representing the index of the value
+	value: the value (void *) associated with the key
+
+Return
+	nothing
+*/
+static void set_key_value(hash_table_t *hash_table, char *key, void *value) {
+	// create the new key value pair
+	hash_table_kv_t *key_value = (hash_table_kv_t *) malloc(sizeof(hash_table_kv_t));
+
+	// set the key and value
+	key_value->key = key;
+	key_value->value = value;
+
+	// get the index to the bucket from the key
+	unsigned long long index = crc64(key) % hash_table->bucket_count;
+
+	// add it to the list
+	int add_result = linked_list_add(&hash_table->buckets[index], (void *)key_value);
+
+	// error handling for if add result goes here
 }
 
-int hash_table_init(hash_table_t *hash_table) {
+/*
+Description
+	Checks for the need to rehash the hash table and rehashes if required.
+
+Params
+	hash_table: the hash table to potentially rehash
+
+Return
+	nothing
+*/
+static void rehash_check(hash_table_t *hash_table) {
+	// total number of key-value pairs in our hash table
+	int key_value_count = 0;
+
+	// sum up all the key value pairs
+	for (int i = 0; i < hash_table->bucket_count; i++) {
+		key_value_count += hash_table->buckets[i].length;
+	}
+
+	// calculate the key-value pair threshold
+	int rehash_threshold = hash_table->bucket_count * LOAD_FACTOR;
+
+	// if the amount of key-value pairs is less than the threshold, don't rehash
+	if (key_value_count < rehash_threshold) return;
+
+	// the temporary hash table we will be moving the key value pairs to
+	hash_table_t temp_hash_table;
+
+	// initialize the temp hash table, make its length grow by a factor of GROWTH_FACTOR
+	hash_table_init(&temp_hash_table, hash_table->bucket_count * GROWTH_FACTOR);
+
+	// iterate over every key-value pair of the hash_table
+	for (int i = 0; i < hash_table->bucket_count; i++) {
+		// linked list node used to iterate through the list
+		linked_list_node_t *curr_node = hash_table->buckets[i].sent;
+
+		while (curr_node != NULL) {
+			// get the key value pair
+			hash_table_kv_t *key_value = (hash_table_kv_t *)curr_node->data;
+
+			// add the key value pair to the temporary hash table
+			set_key_value(&temp_hash_table, key_value->key, key_value->value);
+
+			// increment the node
+			curr_node = curr_node->next;
+		}
+
+		// now that we have copied all the keys from the bucket, free it
+		linked_list_free(&(hash_table->buckets[i]));
+	}
+
+	// free the buckets array now that we have copied over all key-value pairs
+	free(hash_table->buckets);
+
+	// copy the key value pairs and new length back to the original hash table
+	hash_table->buckets = temp_hash_table.buckets;
+	hash_table->bucket_count = temp_hash_table.bucket_count;
+}
+
+int hash_table_init(hash_table_t *hash_table, int initial_size) {
 	// initialize the array of linked lists
-	hash_table->buckets = (linked_list_t *) malloc(sizeof(linked_list_t) * INITIAL_SIZE);
+	hash_table->buckets = (linked_list_t *) malloc(sizeof(linked_list_t) * initial_size);
 
 	// if initialization failed, return error code 1
-	if(hash_table->buckets == NULL) return 1;
+	if (hash_table->buckets == NULL) return 1;
 
 	// initialize the starting bucket count
-	hash_table->bucket_count = INITIAL_SIZE;
+	hash_table->bucket_count = initial_size;
 
 	// initialize each linked list
 	for (int i = 0; i < hash_table->bucket_count; i++) {
@@ -46,13 +130,13 @@ void *hash_table_get(hash_table_t *hash_table, char *key) {
 	linked_list_node_t *curr_node = hash_table->buckets[index].sent;
 
 	// iterate through the list
-	while(curr_node != NULL) {
+	while (curr_node != NULL) {
 
 		// get the key value pair
 		hash_table_kv_t *key_value = (hash_table_kv_t *)curr_node->data;
 
 		// if we found a matching key, return the cooresponding value
-		if(strcmp(key_value->key, key) == 0) {
+		if (strcmp(key_value->key, key) == 0) {
 			return key_value->value;
 		}
 
@@ -69,22 +153,13 @@ void *hash_table_get_or_set(hash_table_t *hash_table, char *key, void *value) {
 	void *curr_value = hash_table_get(hash_table, key);
 
 	// if there is already a key value pair, return the key's value
-	if(curr_value) return curr_value;
+	if (curr_value) return curr_value;
 
-	// the key value pair isn't already in the hash table, so we need to create one
-	hash_table_kv_t *key_value = (hash_table_kv_t *) malloc(sizeof(hash_table_kv_t));
+	// before we add another key value pair, check if we have to rehash the table
+	rehash_check(hash_table);
 
-	// set the key and value
-	key_value->key = key;
-	key_value->value = value;
-
-	// get the index to the bucket from the key
-	unsigned long long index = crc64(key) % hash_table->bucket_count;
-
-	// add it to the list
-	int add_result = linked_list_add(&hash_table->buckets[index], (void *)key_value);
-
-	// handle error here (ask prof)
+	// add the key value pair to the hash table
+	set_key_value(hash_table, key, value);
 
 	return NULL;
 }
@@ -99,7 +174,7 @@ void hash_table_free(hash_table_t *hash_table) {
 		linked_list_node_t *curr_node = list->sent;
 
 		// loop over the linked list
-		while(curr_node != NULL) {
+		while (curr_node != NULL) {
 
 			// get the key value pair
 			hash_table_kv_t *key_value = (hash_table_kv_t *)curr_node->data;

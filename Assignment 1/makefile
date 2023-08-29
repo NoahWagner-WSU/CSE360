@@ -21,4 +21,4 @@ getWord.o: getWord.c getWord.h
 
 .PHONY: clean
 clean:
-	rm pairsofwords main.o program.o hash_table.o linked_list.o
+	rm pairsofwords main.o program.o hash_table.o linked_list.o crc64.o getWord.o

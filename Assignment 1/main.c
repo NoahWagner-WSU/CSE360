@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
 	hash_table_t hash_table;
 
-	hash_table_init(&hash_table);
+	hash_table_init(&hash_table, 1);
 
 	int *value1 = malloc(sizeof(int));
 	*value1 = 21;
@@ -68,6 +68,8 @@ int main(int argc, char **argv) {
 	printf("key5 has value: x=%d\n", ((point_t *)hash_table_get(&hash_table, "crazy"))->x);
 
 	printf("keyx has value: %p\n", hash_table_get(&hash_table, "asdf lsjd fk!"));
+
+	printf("final hash table length: %d\n", hash_table.bucket_count);
 
 	hash_table_free(&hash_table);
 
