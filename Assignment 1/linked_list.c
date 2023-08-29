@@ -1,9 +1,9 @@
 /*
-NAME:
-DATE:
-ClASS:
-ASSIGNMENT:
-DESC:
+NAME: Noah Wagner
+DATE: 8/29/23
+ClASS: CSE360
+ASSIGNMENT: Assignment 1
+DESC: A basic linked list implementation used by hash table functions.
 */
 
 #include <stdlib.h>

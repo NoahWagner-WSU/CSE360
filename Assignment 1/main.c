@@ -1,9 +1,11 @@
 /*
-NAME:
-DATE:
-ClASS:
-ASSIGNMENT:
-DESC:
+NAME: Noah Wagner
+DATE: 8/29/23
+ClASS: CSE360
+ASSIGNMENT: Assignment 1
+DESC: counts repeating word pairs from user specified files from the command 
+	line arguments. Uses a hashmap for fast performance, and prints results to 
+	stdout.
 */
 
 #include <stdio.h>

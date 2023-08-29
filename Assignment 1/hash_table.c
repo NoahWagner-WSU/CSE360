@@ -1,9 +1,11 @@
 /*
-NAME:
-DATE:
-ClASS:
-ASSIGNMENT:
-DESC:
+NAME: Noah Wagner
+DATE: 8/29/23
+ClASS: CSE360
+ASSIGNMENT: Assignment 1
+DESC: A basic generic implementation of a hash table, used by the main program
+	to store pairs of words as keys and the amount of times they occure as the 
+	value.
 */
 
 #include <stdlib.h>
@@ -187,8 +189,10 @@ void *hash_table_get_or_set(hash_table_t *hash_table, char *key, void *value) {
 }
 
 hash_table_kv_t *hash_table_to_array(hash_table_t *hash_table) {
+	// get the total amount of key value pairs
 	int key_value_count = hash_table_count_kv(hash_table);
 
+	// allocate space for the return array
 	hash_table_kv_t *final_array =
 	    (hash_table_kv_t *) malloc(sizeof(hash_table_kv_t) * key_value_count);
 
