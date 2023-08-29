@@ -14,6 +14,36 @@ DESC:
 
 #define GROWTH_FACTOR 3
 #define LOAD_FACTOR 0.75
+#define INITIAL_SIZE 16
+
+/*
+Description
+	initializes the heap, allocates memory for a specified size
+
+Params
+	hash_table: a pointer to the table to initialize
+	size: the initial size of the heap
+
+Return
+	0 on success, 1 on failure to allocate
+*/
+static int init_with_size(hash_table_t *hash_table, int size) {
+	// initialize the array of linked lists
+	hash_table->buckets = (linked_list_t *) malloc(sizeof(linked_list_t) * size);
+
+	// if initialization failed, return error code 1
+	if (hash_table->buckets == NULL) return 1;
+
+	// initialize the starting bucket count
+	hash_table->bucket_count = size;
+
+	// initialize each linked list
+	for (int i = 0; i < hash_table->bucket_count; i++) {
+		linked_list_init(&(hash_table->buckets[i]));
+	}
+
+	return 0;
+}
 
 /*
 Description
@@ -74,7 +104,7 @@ static void rehash_check(hash_table_t *hash_table) {
 	hash_table_t temp_hash_table;
 
 	// initialize the temp hash table, make its length grow by a factor of GROWTH_FACTOR
-	hash_table_init(&temp_hash_table, hash_table->bucket_count * GROWTH_FACTOR);
+	init_with_size(&temp_hash_table, hash_table->bucket_count * GROWTH_FACTOR);
 
 	// iterate over every key-value pair of the hash_table
 	for (int i = 0; i < hash_table->bucket_count; i++) {
@@ -104,22 +134,9 @@ static void rehash_check(hash_table_t *hash_table) {
 	hash_table->bucket_count = temp_hash_table.bucket_count;
 }
 
-int hash_table_init(hash_table_t *hash_table, int initial_size) {
-	// initialize the array of linked lists
-	hash_table->buckets = (linked_list_t *) malloc(sizeof(linked_list_t) * initial_size);
-
-	// if initialization failed, return error code 1
-	if (hash_table->buckets == NULL) return 1;
-
-	// initialize the starting bucket count
-	hash_table->bucket_count = initial_size;
-
-	// initialize each linked list
-	for (int i = 0; i < hash_table->bucket_count; i++) {
-		linked_list_init(&(hash_table->buckets[i]));
-	}
-
-	return 0;
+int hash_table_init(hash_table_t *hash_table) {
+	// initialize the hash table with the default size
+	return init_with_size(hash_table, INITIAL_SIZE);
 }
 
 void *hash_table_get(hash_table_t *hash_table, char *key) {

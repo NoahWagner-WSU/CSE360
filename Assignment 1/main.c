@@ -23,7 +23,7 @@ int main(int argc, char **argv) {
 
 	hash_table_t hash_table;
 
-	hash_table_init(&hash_table, 1);
+	hash_table_init(&hash_table);
 
 	int *value1 = malloc(sizeof(int));
 	*value1 = 21;
