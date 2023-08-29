@@ -1,5 +1,5 @@
 pairsofwords: main.o program.o hash_table.o linked_list.o crc64.o getWord.o
-	cc $^ -o $@
+	cc -o $@ $^
 
 main.o: main.c program.h
 	cc $< -c

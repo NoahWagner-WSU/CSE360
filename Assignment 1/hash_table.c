@@ -29,7 +29,8 @@ Return
 */
 static int init_with_size(hash_table_t *hash_table, int size) {
 	// initialize the array of linked lists
-	hash_table->buckets = (linked_list_t *) malloc(sizeof(linked_list_t) * size);
+	hash_table->buckets =
+	    (linked_list_t *) malloc(sizeof(linked_list_t) * size);
 
 	// if initialization failed, return error code 1
 	if (hash_table->buckets == NULL) return 1;
@@ -47,7 +48,7 @@ static int init_with_size(hash_table_t *hash_table, int size) {
 
 /*
 Description
-	adds the key value pair to the hash table, assumes the key isn't 
+	adds the key value pair to the hash table, assumes the key isn't
 	already in the table
 
 Params
@@ -58,9 +59,10 @@ Params
 Return
 	nothing
 */
-static void set_key_value(hash_table_t *hash_table, char *key, void *value) {
+static int set_key_value(hash_table_t *hash_table, char *key, void *value) {
 	// create the new key value pair
-	hash_table_kv_t *key_value = (hash_table_kv_t *) malloc(sizeof(hash_table_kv_t));
+	hash_table_kv_t *key_value =
+	    (hash_table_kv_t *) malloc(sizeof(hash_table_kv_t));
 
 	// set the key and value
 	key_value->key = key;
@@ -70,9 +72,7 @@ static void set_key_value(hash_table_t *hash_table, char *key, void *value) {
 	unsigned long long index = crc64(key) % hash_table->bucket_count;
 
 	// add it to the list
-	int add_result = linked_list_add(&hash_table->buckets[index], (void *)key_value);
-
-	// error handling for if add result goes here
+	return linked_list_add(&hash_table->buckets[index], (void *)key_value);
 }
 
 /*
@@ -86,19 +86,12 @@ Return
 	nothing
 */
 static void rehash_check(hash_table_t *hash_table) {
-	// total number of key-value pairs in our hash table
-	int key_value_count = 0;
-
-	// sum up all the key value pairs
-	for (int i = 0; i < hash_table->bucket_count; i++) {
-		key_value_count += hash_table->buckets[i].length;
-	}
 
 	// calculate the key-value pair threshold
 	int rehash_threshold = hash_table->bucket_count * LOAD_FACTOR;
 
 	// if the amount of key-value pairs is less than the threshold, don't rehash
-	if (key_value_count < rehash_threshold) return;
+	if (hash_table_count_kv(hash_table) < rehash_threshold) return;
 
 	// the temporary hash table we will be moving the key value pairs to
 	hash_table_t temp_hash_table;
@@ -137,6 +130,18 @@ static void rehash_check(hash_table_t *hash_table) {
 int hash_table_init(hash_table_t *hash_table) {
 	// initialize the hash table with the default size
 	return init_with_size(hash_table, INITIAL_SIZE);
+}
+
+int hash_table_count_kv(hash_table_t *hash_table) {
+	// total number of key-value pairs in our hash table
+	int key_value_count = 0;
+
+	// sum up all the key value pairs
+	for (int i = 0; i < hash_table->bucket_count; i++) {
+		key_value_count += hash_table->buckets[i].length;
+	}
+
+	return key_value_count;
 }
 
 void *hash_table_get(hash_table_t *hash_table, char *key) {
@@ -179,6 +184,44 @@ void *hash_table_get_or_set(hash_table_t *hash_table, char *key, void *value) {
 	set_key_value(hash_table, key, value);
 
 	return NULL;
+}
+
+hash_table_kv_t *hash_table_to_array(hash_table_t *hash_table) {
+	int key_value_count = hash_table_count_kv(hash_table);
+
+	hash_table_kv_t *final_array =
+	    (hash_table_kv_t *) malloc(sizeof(hash_table_kv_t) * key_value_count);
+
+	// return out of the function if we fail to allocate
+	if (final_array == NULL) return NULL;
+
+	// keep track of where we are in the array
+	int array_index = 0;
+
+	// iterate over every key-value pair of the hash_table
+	for (int i = 0; i < hash_table->bucket_count; i++) {
+		// linked list node used to iterate through the list
+		linked_list_node_t *curr_node = hash_table->buckets[i].sent;
+
+		while (curr_node != NULL) {
+
+			// set the key at the current index
+			final_array[array_index].key = 
+				((hash_table_kv_t *)curr_node->data)->key;
+
+			// set the value at the current index
+			final_array[array_index].value = 
+				((hash_table_kv_t *)curr_node->data)->value;
+
+			// increment the node
+			curr_node = curr_node->next;
+
+			// don't forget to increment the array index
+			array_index++;
+		}
+	}
+
+	return final_array;
 }
 
 void hash_table_free(hash_table_t *hash_table) {

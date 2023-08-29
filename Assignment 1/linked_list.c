@@ -16,7 +16,8 @@ void linked_list_init(linked_list_t *list) {
 
 int linked_list_add(linked_list_t *list, void *data) {
 	// allocate space for new node
-	linked_list_node_t *new_node = (linked_list_node_t *) malloc(sizeof(linked_list_node_t));
+	linked_list_node_t *new_node =
+	    (linked_list_node_t *) malloc(sizeof(linked_list_node_t));
 
 	// if allocation failed, return error code 1
 	if (new_node == NULL) return 1;

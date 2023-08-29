@@ -71,6 +71,19 @@ int main(int argc, char **argv) {
 
 	printf("final hash table length: %d\n", hash_table.bucket_count);
 
+	printf("testing to array function...\n");
+
+	hash_table_kv_t *hash_array = hash_table_to_array(&hash_table);
+
+	for (int i = 0; i < hash_table_count_kv(&hash_table); i++) {
+		char *key = hash_array[i].key;
+		void *value = hash_array[i].value;
+
+		printf("%s: %p\n", key, value);
+	}
+
+	free(hash_array);
+
 	hash_table_free(&hash_table);
 
 	return 0;

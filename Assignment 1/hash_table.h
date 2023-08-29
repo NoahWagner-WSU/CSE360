@@ -35,6 +35,18 @@ int hash_table_init(hash_table_t *hash_table);
 
 /*
 Description
+	counts and returns all the key-value pairs in the hash map
+
+Params
+	hash_table: the hash table to count key value pairs from
+
+Return
+	the number of key value pairs in the hash table
+*/
+int hash_table_count_kv(hash_table_t *hash_table);
+
+/*
+Description
 	gets the value from the corresponding key
 
 Params
@@ -63,6 +75,23 @@ Return
 	key if it is already in the hash table
 */
 void *hash_table_get_or_set(hash_table_t *hash_table, char *key, void *value);
+
+/*
+Description
+	puts all key-value pairs into an array for easy access. Calling 
+	hash_table_free(hash_table) will free all the keys and values in
+	the array, so only call the hash free function once you're done 
+	using array. The array is allocated on heap, you must free it 
+	when you are done using it.
+
+Params
+	hash_table: the table reformat into an array
+
+Return
+	NULL if failed to allocate the array, else a pointer to the 
+	beginning of the new key-value array
+*/
+hash_table_kv_t *hash_table_to_array(hash_table_t *hash_table);
 
 /*
 Description
