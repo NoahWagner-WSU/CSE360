@@ -10,7 +10,7 @@ typedef struct hash_table hash_table_t;
 
 struct hash_table {
 	linked_list_t *buckets;
-	int bucket_count;
+	int bucket_count, kv_count;
 };
 
 // not sure what "Growth of the table will be transparent to the code using your hash table module." means, ask prof
@@ -35,18 +35,6 @@ int hash_table_init(hash_table_t *hash_table);
 
 /*
 Description
-	counts and returns all the key-value pairs in the hash map
-
-Params
-	hash_table: the hash table to count key value pairs from
-
-Return
-	the number of key value pairs in the hash table
-*/
-int hash_table_count_kv(hash_table_t *hash_table);
-
-/*
-Description
 	gets the value from the corresponding key
 
 Params
@@ -60,21 +48,18 @@ void *hash_table_get(hash_table_t *hash_table, char *key);
 
 /*
 Description
-	if the passed key exists, return the value of the key, else add the 
-	key value pair to the hash table
+	add a key value pair to the hash table, expands the hash table
+	if neccessary
 
 Params
-	hash_table: a pointer to the table to run this function on
-	key: the key to "get or set"
-	value: the value to set the key to if the key isn't already 
-		in the hash table (isn't used in the case where the key
-		is already in the hash table)
+	hash_table: a pointer to the hash table to add the key value pair to
+	key: the key to add
+	value: the value of the key
 
 Return
-	NULL if the key isn't in the hash table, or the current value of the
-	key if it is already in the hash table
+	returns 0 on success and 1 on failure to allocate space for the key value pair
 */
-void *hash_table_get_or_set(hash_table_t *hash_table, char *key, void *value);
+int hash_table_set(hash_table_t *hash_table, char *key, void *value);
 
 /*
 Description

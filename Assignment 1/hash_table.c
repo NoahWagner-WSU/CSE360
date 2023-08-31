@@ -40,6 +40,9 @@ static int init_with_size(hash_table_t *hash_table, int size) {
 	// initialize the starting bucket count
 	hash_table->bucket_count = size;
 
+	// set the initial key-value count to 0
+	hash_table->kv_count = 0;
+
 	// initialize each linked list
 	for (int i = 0; i < hash_table->bucket_count; i++) {
 		linked_list_init(&(hash_table->buckets[i]));
@@ -73,6 +76,9 @@ static int set_key_value(hash_table_t *hash_table, char *key, void *value) {
 	// get the index to the bucket from the key
 	unsigned long long index = crc64(key) % hash_table->bucket_count;
 
+	// update the key value count in the hash table
+	hash_table->kv_count++;
+
 	// add it to the list
 	return linked_list_add(&hash_table->buckets[index], (void *)key_value);
 }
@@ -93,7 +99,7 @@ static void rehash_check(hash_table_t *hash_table) {
 	int rehash_threshold = hash_table->bucket_count * LOAD_FACTOR;
 
 	// if the amount of key-value pairs is less than the threshold, don't rehash
-	if (hash_table_count_kv(hash_table) < rehash_threshold) return;
+	if (hash_table->kv_count < rehash_threshold) return;
 
 	// the temporary hash table we will be moving the key value pairs to
 	hash_table_t temp_hash_table;
@@ -134,18 +140,6 @@ int hash_table_init(hash_table_t *hash_table) {
 	return init_with_size(hash_table, INITIAL_SIZE);
 }
 
-int hash_table_count_kv(hash_table_t *hash_table) {
-	// total number of key-value pairs in our hash table
-	int key_value_count = 0;
-
-	// sum up all the key value pairs
-	for (int i = 0; i < hash_table->bucket_count; i++) {
-		key_value_count += hash_table->buckets[i].length;
-	}
-
-	return key_value_count;
-}
-
 void *hash_table_get(hash_table_t *hash_table, char *key) {
 	// get the index to the bucket from the key
 	unsigned long long index = crc64(key) % hash_table->bucket_count;
@@ -172,29 +166,18 @@ void *hash_table_get(hash_table_t *hash_table, char *key) {
 	return NULL;
 }
 
-void *hash_table_get_or_set(hash_table_t *hash_table, char *key, void *value) {
-	// try to get the value associated with the key
-	void *curr_value = hash_table_get(hash_table, key);
-
-	// if there is already a key value pair, return the key's value
-	if (curr_value) return curr_value;
-
+int hash_table_set(hash_table_t *hash_table, char *key, void *value) {
 	// before we add another key value pair, check if we have to rehash the table
 	rehash_check(hash_table);
 
 	// add the key value pair to the hash table
-	set_key_value(hash_table, key, value);
-
-	return NULL;
+	return set_key_value(hash_table, key, value);
 }
 
 hash_table_kv_t *hash_table_to_array(hash_table_t *hash_table) {
-	// get the total amount of key value pairs
-	int key_value_count = hash_table_count_kv(hash_table);
-
 	// allocate space for the return array
 	hash_table_kv_t *final_array =
-	    (hash_table_kv_t *) malloc(sizeof(hash_table_kv_t) * key_value_count);
+	    (hash_table_kv_t *) malloc(sizeof(hash_table_kv_t) * hash_table->kv_count);
 
 	// return out of the function if we fail to allocate
 	if (final_array == NULL) return NULL;

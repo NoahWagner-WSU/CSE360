@@ -27,66 +27,15 @@ int main(int argc, char **argv) {
 
 	hash_table_init(&hash_table);
 
-	int *value1 = malloc(sizeof(int));
-	*value1 = 21;
-	point_t *value2 = malloc(sizeof(point_t));
-	value2->x = 1;
-	value2->y = 2;
-	int *value3 = malloc(sizeof(int));
-	*value3 = 1;
-	int *value4 = malloc(sizeof(int));
-	*value4 = 123;
-	point_t *value5 = malloc(sizeof(point_t));
-	value5->x = 3;
-	value5->y = 4;
-	char *value6 = malloc(sizeof(char));
-	*value6 = 'a';
+	FILE *f = fopen("mobydick.txt", "r");
 
-	char *key1 = malloc(sizeof(char) + 1);
-	char *key2 = malloc(sizeof(char) * 2 + 1);
-	char *key3 = malloc(sizeof(char) * 3 + 1);
-	char *key4 = malloc(sizeof(char) * 4 + 1);
-	char *key5 = malloc(sizeof(char) * 5 + 1);
-	char *key6 = malloc(sizeof(char) * 6 + 1);
+	count_word_pairs(f, &hash_table);
 
-	strcpy(key1, "a");
-	strcpy(key2, "ba");
-	strcpy(key3, "cat");
-	strcpy(key4, "bald");
-	strcpy(key5, "crazy");
-	strcpy(key6, "no way");
-
-	hash_table_get_or_set(&hash_table, key1, (void *) value1);
-	hash_table_get_or_set(&hash_table, key2, (void *) value2);
-	hash_table_get_or_set(&hash_table, key3, (void *) value3);
-	hash_table_get_or_set(&hash_table, key4, (void *) value4);
-	hash_table_get_or_set(&hash_table, key5, (void *) value5);
-	hash_table_get_or_set(&hash_table, key6, (void *) value6);
-
-	int *test1 = (int *)hash_table_get_or_set(&hash_table, key1, value6);
-
-	printf("key1 has value: %d\n", *test1);
-
-	printf("key5 has value: x=%d\n", ((point_t *)hash_table_get(&hash_table, "crazy"))->x);
-
-	printf("keyx has value: %p\n", hash_table_get(&hash_table, "asdf lsjd fk!"));
-
-	printf("final hash table length: %d\n", hash_table.bucket_count);
-
-	printf("testing to array function...\n");
-
-	hash_table_kv_t *hash_array = hash_table_to_array(&hash_table);
-
-	for (int i = 0; i < hash_table_count_kv(&hash_table); i++) {
-		char *key = hash_array[i].key;
-		void *value = hash_array[i].value;
-
-		printf("%s: %p\n", key, value);
-	}
-
-	free(hash_array);
+	print_results(&hash_table, 10);
 
 	hash_table_free(&hash_table);
+
+	fclose(f);
 
 	return 0;
 }
