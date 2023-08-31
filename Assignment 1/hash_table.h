@@ -49,7 +49,8 @@ void *hash_table_get(hash_table_t *hash_table, char *key);
 /*
 Description
 	add a key value pair to the hash table, expands the hash table
-	if neccessary
+	if neccessary. If the key is already in the hash table, set the
+	existing key's value to the passed value, and return the old one
 
 Params
 	hash_table: a pointer to the hash table to add the key value pair to
@@ -57,9 +58,10 @@ Params
 	value: the value of the key
 
 Return
-	returns 0 on success and 1 on failure to allocate space for the key value pair
+	returns the old value of the key if it is already in the hash table,
+	NULL otherwise
 */
-int hash_table_set(hash_table_t *hash_table, char *key, void *value);
+void *hash_table_set(hash_table_t *hash_table, char *key, void *value);
 
 /*
 Description

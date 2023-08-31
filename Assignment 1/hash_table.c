@@ -85,6 +85,45 @@ static int set_key_value(hash_table_t *hash_table, char *key, void *value) {
 
 /*
 Description
+	returns a pointer to the key value pair whose key is equal
+	to the passed key
+
+Params
+	hash_table: the hash table to add the key value pair to
+	key: a string representing the key of the kv pair
+
+Return
+	a pointer to the key value pair that was found, or NULL
+	if nothing was found
+*/
+static hash_table_kv_t *get_key_value(hash_table_t *hash_table, char *key) {
+	// get the index to the bucket from the key
+	unsigned long long index = crc64(key) % hash_table->bucket_count;
+
+	// linked list node used to iterate through the list
+	linked_list_node_t *curr_node = hash_table->buckets[index].sent;
+
+	// iterate through the list
+	while (curr_node != NULL) {
+
+		// get the key value pair
+		hash_table_kv_t *key_value = (hash_table_kv_t *)curr_node->data;
+
+		// if we found a matching key, return the cooresponding value
+		if (strcmp(key_value->key, key) == 0) {
+			return key_value;
+		}
+
+		// don't forget to increment to the next node
+		curr_node = curr_node->next;
+	}
+
+	// nothing was found
+	return NULL;
+}
+
+/*
+Description
 	Checks for the need to rehash the hash table and rehashes if required.
 
 Params
@@ -141,37 +180,30 @@ int hash_table_init(hash_table_t *hash_table) {
 }
 
 void *hash_table_get(hash_table_t *hash_table, char *key) {
-	// get the index to the bucket from the key
-	unsigned long long index = crc64(key) % hash_table->bucket_count;
+	hash_table_kv_t *key_value = get_key_value(hash_table, key);
 
-	// linked list node used to iterate through the list
-	linked_list_node_t *curr_node = hash_table->buckets[index].sent;
+	if(key_value == NULL) return NULL;
 
-	// iterate through the list
-	while (curr_node != NULL) {
-
-		// get the key value pair
-		hash_table_kv_t *key_value = (hash_table_kv_t *)curr_node->data;
-
-		// if we found a matching key, return the cooresponding value
-		if (strcmp(key_value->key, key) == 0) {
-			return key_value->value;
-		}
-
-		// don't forget to increment to the next node
-		curr_node = curr_node->next;
-	}
-
-	// nothing was found
-	return NULL;
+	return key_value->value;
 }
 
-int hash_table_set(hash_table_t *hash_table, char *key, void *value) {
+void *hash_table_set(hash_table_t *hash_table, char *key, void *value) {
+	// check if the key is already in the hash table
+	hash_table_kv_t *key_value = get_key_value(hash_table, key);
+
+	// if key value pair already exists...
+	if(key_value != NULL) {
+		// set the old value to the passed value and return the old value
+		void *old_value = key_value->value;
+		key_value->value = value;
+		return old_value;
+	}
+
 	// before we add another key value pair, check if we have to rehash the table
 	rehash_check(hash_table);
 
 	// add the key value pair to the hash table
-	return set_key_value(hash_table, key, value);
+	set_key_value(hash_table, key, value);
 }
 
 hash_table_kv_t *hash_table_to_array(hash_table_t *hash_table) {
