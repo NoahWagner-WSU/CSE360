@@ -15,6 +15,56 @@ DESC: Contains the main functions of the program to load files, read repeated
 #include "getWord.h"
 #include "hash_table.h"
 
+int parse_args(int argc, char **argv, int *max_print, int *num_of_files, FILE ***files) {
+	if(argc == 1) {
+		printf("Usage: ./pairsofwords <-count> fileName1 <fileName2> <filename3> ... \n");
+		exit(1);
+	}
+
+	int failed = 0;
+	char garbage[100];
+	int file_start_index = 1;
+
+	// check for optional flag
+	int count_result = sscanf(argv[1], "-%d%s", max_print, garbage);
+
+	if(count_result == 2) 
+		failed = 1;
+	else if (sscanf(argv[1], "-%s", garbage) && count_result != 1)
+		failed = 1;
+
+	if(failed) {
+		printf("Error: recieved invalid -count argument\n");
+		exit(1);
+	}
+
+	if(count_result == 1)
+		file_start_index = 2;
+
+	*num_of_files = argc - file_start_index;
+
+	if(*num_of_files == 0) {
+		printf("Error: must recieve at least 1 file\n");
+		exit(1);
+	}
+
+	*files = malloc(sizeof(FILE *) * *num_of_files);
+
+	for (int i = file_start_index; i < argc; i++) {
+		FILE *file = fopen(argv[i], "r");
+
+		if(file == NULL) {
+			printf("Error: unable to read file named \"%s\"\n", argv[i]);
+			*num_of_files = i - file_start_index;
+			return 1;
+		}
+
+		(*files)[i - file_start_index] = file;
+	}
+
+	return 0;
+}
+
 static char *create_word_pair(int s1_length, char *s1, int s2_length, char *s2) {
 	char *word_pair = (char *)malloc(s1_length + s2_length + 2);
 

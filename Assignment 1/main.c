@@ -3,8 +3,8 @@ NAME: Noah Wagner
 DATE: 8/29/23
 ClASS: CSE360
 ASSIGNMENT: Assignment 1
-DESC: counts repeating word pairs from user specified files from the command 
-	line arguments. Uses a hashmap for fast performance, and prints results to 
+DESC: counts repeating word pairs from user specified files from the command
+	line arguments. Uses a hashmap for fast performance, and prints results to
 	stdout.
 */
 
@@ -13,29 +13,40 @@ DESC: counts repeating word pairs from user specified files from the command
 #include <stdlib.h>
 #include "program.h"
 
-typedef struct { int x, y; } point_t;
-
 int main(int argc, char **argv) {
-	// allocate an array of file pointers to be the size of sizeof(FILE *) * (argc - 1) <- if count is specified, else just argc
-	// create the main hash_table
-	// for every file pointer...
-		// run the count word pairs function
-	// print output
-	// return success exit code
+	int max_print = -1;
+	int num_of_files;
+	FILE **files;
+
+	int file_read_fail = parse_args(argc, argv, &max_print, &num_of_files, &files);
+
+	if (file_read_fail) {
+		for (int i = 0; i < num_of_files; i++) {
+			fclose(files[i]);
+		}
+		free(files);
+		exit(1);
+	}
 
 	hash_table_t hash_table;
 
-	hash_table_init(&hash_table);
+	int error = hash_table_init(&hash_table);
 
-	FILE *f = fopen("mobydick.txt", "r");
+	if (error) {
+		printf("Error: failed to initialize hash table\n");
+		exit(1);
+	}
 
-	count_word_pairs(f, &hash_table);
+	for (int i = 0; i < num_of_files; i++) {
+		count_word_pairs(files[i], &hash_table);
+		fclose(files[i]);
+	}
 
-	print_results(&hash_table, 10);
+	free(files);
+
+	print_results(&hash_table, max_print);
 
 	hash_table_free(&hash_table);
-
-	fclose(f);
 
 	return 0;
 }

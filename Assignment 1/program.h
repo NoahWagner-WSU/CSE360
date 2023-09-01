@@ -1,7 +1,7 @@
 #include "hash_table.h"
 
-// calls getWord until reaches the end of the file, adds the consecutive word pair info to the hash table, 
-// basically just adds every consecutive word pair to the hashmap (if hashmap index already found that pair, increase the count)
+int parse_args(int argc, char **argv, int *max_print, int *num_of_files, FILE ***files);
+
 void count_word_pairs(FILE *file, hash_table_t *hash_table);
 
 // prints the final hash map, max_print would be -count
