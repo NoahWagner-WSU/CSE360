@@ -4,7 +4,7 @@ DATE: 8/29/23
 ClASS: CSE360
 ASSIGNMENT: Assignment 1
 DESC: Contains the main functions of the program to load files, read repeated
-	word pairs and put them in the hash table, and print out the program's 
+	word pairs and put them in the hash table, and print out the program's
 	results.
 */
 
@@ -15,35 +15,32 @@ DESC: Contains the main functions of the program to load files, read repeated
 #include "getWord.h"
 #include "hash_table.h"
 
-void parse_args(int argc, char **argv, int *max_print, int *num_of_files, FILE ***files) {
-	if(argc == 1) {
-		printf("Usage: ./pairsofwords <-count> fileName1 <fileName2> <filename3> ... \n");
-		exit(1);
-	}
-
+static int parse_count(char *arg1, int *max_print) {
 	int failed = 0;
 	char garbage[100];
-	int file_start_index = 1;
 
 	// check for optional flag
-	int count_result = sscanf(argv[1], "-%d%s", max_print, garbage);
+	int count_result = sscanf(arg1, "-%d%s", max_print, garbage);
 
-	if(count_result == 2) 
+	if (count_result == 2)
 		failed = 1;
-	else if (sscanf(argv[1], "-%s", garbage) && count_result != 1)
+	else if (sscanf(arg1, "-%s", garbage) && count_result != 1)
+		failed = 1;
+	else if (*max_print < 0)
 		failed = 1;
 
-	if(failed) {
+	if (failed) {
 		printf("Error: recieved invalid -count argument\n");
 		exit(1);
 	}
 
-	if(count_result == 1)
-		file_start_index = 2;
+	return (count_result == 1);
+}
 
+static void parse_files(int file_start_index, int argc, char **argv, int *num_of_files, FILE ***files) {
 	*num_of_files = argc - file_start_index;
 
-	if(*num_of_files == 0) {
+	if (*num_of_files == 0) {
 		printf("Error: must recieve at least 1 file\n");
 		exit(1);
 	}
@@ -55,7 +52,7 @@ void parse_args(int argc, char **argv, int *max_print, int *num_of_files, FILE *
 	for (int i = file_start_index; i < argc; i++) {
 		FILE *file = fopen(argv[i], "r");
 
-		if(file == NULL) {
+		if (file == NULL) {
 			printf("Error: unable to read file named \"%s\"\n", argv[i]);
 			*num_of_files = i - file_start_index;
 			file_read_fail = 1;
@@ -65,7 +62,7 @@ void parse_args(int argc, char **argv, int *max_print, int *num_of_files, FILE *
 		(*files)[i - file_start_index] = file;
 	}
 
-	if(file_read_fail) {
+	if (file_read_fail) {
 		for (int i = 0; i < *num_of_files; i++) {
 			fclose((*files)[i]);
 		}
@@ -74,15 +71,26 @@ void parse_args(int argc, char **argv, int *max_print, int *num_of_files, FILE *
 	}
 }
 
+void parse_args(int argc, char **argv, int *max_print, int *num_of_files, FILE ***files) {
+	if (argc == 1) {
+		printf("Usage: ./pairsofwords <-count> fileName1 <fileName2> ... \n");
+		exit(1);
+	}
+
+	int file_start_index = 1 + parse_count(argv[1], max_print);
+
+	parse_files(file_start_index, argc, argv, num_of_files, files);
+}
+
 static char *create_word_pair(int s1_length, char *s1, int s2_length, char *s2) {
 	char *word_pair = (char *)malloc(s1_length + s2_length + 2);
 
-	if(word_pair == NULL) return NULL;
+	if (word_pair == NULL) return NULL;
 
 	int i = 0;
 	int j = 0;
 
-	while(s1[i] != '\0') {
+	while (s1[i] != '\0') {
 		word_pair[i] = s1[i];
 		i++;
 	}
@@ -90,7 +98,7 @@ static char *create_word_pair(int s1_length, char *s1, int s2_length, char *s2) 
 	word_pair[i] = ' ';
 	i++;
 
-	while(s2[j] != '\0') {
+	while (s2[j] != '\0') {
 		word_pair[i + j] = s2[j];
 		j++;
 	}
@@ -109,19 +117,22 @@ static int compar (const void *l, const void*r) {
 
 void count_word_pairs(FILE *file, hash_table_t *hash_table) {
 	char *prev_word = getNextWord(file);
+
+	if (prev_word == NULL) return;
+
 	char *curr_word = getNextWord(file);
 
 	int prev_length = strlen(prev_word);
 	int curr_length = 0;
 
-	while(curr_word != NULL) {
+	while (curr_word != NULL) {
 		curr_length = strlen(curr_word);
 
 		char *word_pair = create_word_pair(prev_length, prev_word, curr_length, curr_word);
 
 		int *pair_count = (int *) hash_table_get(hash_table, word_pair);
 
-		if(pair_count != NULL) {
+		if (pair_count != NULL) {
 			(*pair_count)++;
 			free(word_pair);
 		} else {
@@ -146,10 +157,10 @@ void print_results(hash_table_t *hash_table, int max_print) {
 
 	qsort((void *)key_values, hash_table->kv_count, sizeof(hash_table_kv_t), compar);
 
-	if(max_print == -1) 
+	if (max_print == 0 || max_print > hash_table->kv_count)
 		max_print = hash_table->kv_count;
 
-	for (int i = 0; i < max_print; ++i) {
+	for (int i = 0; i < max_print; i++) {
 		printf("%10d %s\n", *((int *)key_values[i].value), key_values[i].key);
 	}
 

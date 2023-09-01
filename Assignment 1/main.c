@@ -14,7 +14,7 @@ DESC: counts repeating word pairs from user specified files from the command
 #include "program.h"
 
 int main(int argc, char **argv) {
-	int max_print = -1;
+	int max_print = 0;
 	int num_of_files;
 	FILE **files;
 
