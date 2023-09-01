@@ -3,9 +3,7 @@
 
 #include "linked_list.h"
 
-// NOTE: don't forget to add comments
-
-// NOTE: no hash_remove functions (removes single key value pairs) since there is no need for it in this program (maybe add later if needed?)
+// the main hash table struct the user will be dealing with
 typedef struct hash_table hash_table_t;
 
 struct hash_table {
@@ -13,7 +11,7 @@ struct hash_table {
 	int bucket_count, kv_count;
 };
 
-// not sure what "Growth of the table will be transparent to the code using your hash table module." means, ask prof
+// a key value pair of a hash table
 typedef struct hash_table_kv hash_table_kv_t;
 
 struct hash_table_kv {
