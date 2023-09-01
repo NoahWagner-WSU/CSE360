@@ -15,7 +15,7 @@ DESC: Contains the main functions of the program to load files, read repeated
 #include "getWord.h"
 #include "hash_table.h"
 
-int parse_args(int argc, char **argv, int *max_print, int *num_of_files, FILE ***files) {
+void parse_args(int argc, char **argv, int *max_print, int *num_of_files, FILE ***files) {
 	if(argc == 1) {
 		printf("Usage: ./pairsofwords <-count> fileName1 <fileName2> <filename3> ... \n");
 		exit(1);
@@ -50,19 +50,28 @@ int parse_args(int argc, char **argv, int *max_print, int *num_of_files, FILE **
 
 	*files = malloc(sizeof(FILE *) * *num_of_files);
 
+	int file_read_fail = 0;
+
 	for (int i = file_start_index; i < argc; i++) {
 		FILE *file = fopen(argv[i], "r");
 
 		if(file == NULL) {
 			printf("Error: unable to read file named \"%s\"\n", argv[i]);
 			*num_of_files = i - file_start_index;
-			return 1;
+			file_read_fail = 1;
+			break;
 		}
 
 		(*files)[i - file_start_index] = file;
 	}
 
-	return 0;
+	if(file_read_fail) {
+		for (int i = 0; i < *num_of_files; i++) {
+			fclose((*files)[i]);
+		}
+		free(*files);
+		exit(1);
+	}
 }
 
 static char *create_word_pair(int s1_length, char *s1, int s2_length, char *s2) {

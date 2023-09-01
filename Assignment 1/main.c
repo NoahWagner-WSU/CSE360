@@ -18,15 +18,7 @@ int main(int argc, char **argv) {
 	int num_of_files;
 	FILE **files;
 
-	int file_read_fail = parse_args(argc, argv, &max_print, &num_of_files, &files);
-
-	if (file_read_fail) {
-		for (int i = 0; i < num_of_files; i++) {
-			fclose(files[i]);
-		}
-		free(files);
-		exit(1);
-	}
+	parse_args(argc, argv, &max_print, &num_of_files, &files);
 
 	hash_table_t hash_table;
 
