@@ -15,6 +15,7 @@ DESC: A basic generic implementation of a hash table, used by the main program
 #include "crc64.h"
 
 #define GROWTH_FACTOR 3
+// java uses this load factor, so I will as well :)
 #define LOAD_FACTOR 0.75
 #define INITIAL_SIZE 16
 
