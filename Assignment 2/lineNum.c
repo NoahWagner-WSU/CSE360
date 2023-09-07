@@ -6,97 +6,63 @@
 
 #include <stdio.h>
 
-static int find_word(char *buffer, int *line_num, int dictWidth)
-{
-	int i = 0;
-	while (buffer[i] != '\n')
+static void add_null_terminator(char *word_end) {
+	int i = 1;
+	while(*(word_end - i) == ' ')
 		i++;
-	if(i == dictWidth - 1) {
-		i = 0;
-	} else {
-		i++;
-		(*line_num)++;
-	}
-	return i;
-}
-
-static void add_null_terminator(char *word) {
-	int i = 0;
-	while(word[i] != '\n')
-		i++;
-	i--;
-	while(word[i] == ' ')
-		i--;
-	word[++i] = '\0';
+	*(word_end - i + 1) = '\0';
 }
 
 int lineNum(char *dictionaryName, char *word, int dictWidth)
 {
 	int dictionary = open(dictionaryName, O_RDONLY);
+	int low_bound = 0;
 	// NOTE: check with teacher if I should error check lseek
-	int binary_step = lseek(dictionary, 0, SEEK_END) / 2;
+	int high_bound = lseek(dictionary, 0, SEEK_END) / dictWidth;
 	int line_num = 0;
+	int found = 0;
 
-	int read_size = dictWidth * 2;
-	char *buffer = malloc(sizeof(char) * read_size);
+	char *buffer = malloc(sizeof(char) * dictWidth);
 
 	// NOTE: check with teacher if this is good error checking
 	if (dictionary == -1) {
 		line_num = errno;
-		printf("Error opening file: %s\n", strerror(line_num));
+		perror("Error opening file: ");
 		return line_num;
 	}
 
-	int offset = lseek(dictionary, binary_step, SEEK_SET);
+	lseek(dictionary, high_bound * dictWidth / 2, SEEK_SET);
 
-	while (1) {
-		line_num = offset / dictWidth + 1;
-		binary_step /= 2;
+	while (low_bound <= high_bound) {
+		line_num = (high_bound + low_bound) / 2;
 
-		if(line_num == 1) {
-			lseek(dictionary, 0, SEEK_SET);
-		}
+		lseek(dictionary, line_num * dictWidth, SEEK_SET);
 
-		int bytes_read = read(dictionary, buffer, read_size);
+		int bytes_read = read(dictionary, buffer, dictWidth);
 
 		if (bytes_read == -1) {
-			line_num = errno;
-			printf("Error reading file: %s\n", strerror(line_num));
+			// reverses opperations done on line_num at return statement to perserve error code
+			line_num = -errno - 1;
+			perror("Error reading file: ");
 			break;
 		}
 
-		int word_index = find_word(buffer, &line_num, dictWidth);
+		add_null_terminator(buffer + dictWidth - 1);
 
-		add_null_terminator(buffer + word_index);
-
-		int compare_result = strcmp(word, buffer + word_index);
+		int compare_result = strcmp(word, buffer);
 
 		if (compare_result == 0) {
+			found = 1;
 			break;
 		} else if (compare_result > 0) {
-			offset = lseek(
-			                 dictionary,
-			                 binary_step - bytes_read,
-			                 SEEK_CUR
-			         );
+			low_bound = line_num + 1;
 		} else {
-			offset = lseek(
-			                 dictionary,
-			                 -1 * (binary_step + bytes_read),
-			                 SEEK_CUR
-			         );
+			high_bound = line_num - 1;
 		}
-
-		if (binary_step < 1) {
-			line_num *= -1;
-			break;
-		}
-
-		// forces binary step be negative at EOF
-		memset(buffer, 255, read_size);
 	}
 
 	close(dictionary);
 	free(buffer);
-	return line_num;
+	// ask teacher if first line should be considered 1 or 0
+	return found ? (line_num + 1) : -(line_num + 1);
 }
