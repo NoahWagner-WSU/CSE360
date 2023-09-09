@@ -59,7 +59,7 @@ int lineNum(char *dictionaryName, char *word, int dictWidth)
 		return line_num;
 	}
 
-	high_bound = file_size / dictWidth;
+	high_bound = file_size / dictWidth - 1;
 
 	char *buffer = malloc(sizeof(char) * dictWidth);
 	char *search_word = malloc(sizeof(char) * dictWidth);
@@ -71,6 +71,9 @@ int lineNum(char *dictionaryName, char *word, int dictWidth)
 	// keep searching the file if our search space is larger than 0
 	while (low_bound <= high_bound) {
 		line_num = (high_bound + low_bound) / 2;
+
+		// round up if line_num is of the form x.5
+		if((high_bound + low_bound) % 2 == 1) line_num++;
 
 		// shift the read pointer to the current line number
 		if (lseek(dictionary, line_num * dictWidth, SEEK_SET) == -1) {
