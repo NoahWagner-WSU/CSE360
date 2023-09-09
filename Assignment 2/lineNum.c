@@ -73,7 +73,8 @@ int lineNum(char *dictionaryName, char *word, int dictWidth)
 		line_num = (high_bound + low_bound) / 2;
 
 		// round up if line_num is of the form x.5
-		if((high_bound + low_bound) % 2 == 1) line_num++;
+		if((high_bound + low_bound) % 2 == 1) 
+			line_num++;
 
 		// shift the read pointer to the current line number
 		if (lseek(dictionary, line_num * dictWidth, SEEK_SET) == -1) {
