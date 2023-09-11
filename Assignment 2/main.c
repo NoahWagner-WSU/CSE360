@@ -25,5 +25,8 @@ int main()
 	printf("m:1 s:%d\n", lineNum("webster_16", "a b c", 16));
 	printf("m:-1 s:%d\n", lineNum("tiny_9", "a b c", 9));
 
+	printf("m:13 s:%d\n", lineNum("webster_no_read", "readable", 16));
+	printf("m:2 s:%d\n", lineNum("asdfsdfsad", "readable", 9));
+
 	return 0;
 }
