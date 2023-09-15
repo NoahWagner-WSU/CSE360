@@ -45,11 +45,11 @@ int find_readables(char *inputPath)
 
 	if (chdir(inputPath) == -1) {
 		// no read permission sub-case
-		if (errno == EACCES)
-			return 0;
 		int tmp_error = errno;
-		fprintf(stderr, "%s\n", strerror(tmp_error));
 		closedir(dir);
+		if (tmp_error == EACCES)
+			return 0;
+		fprintf(stderr, "%s\n", strerror(tmp_error));
 		return -tmp_error;
 	}
 
@@ -63,10 +63,12 @@ int find_readables(char *inputPath)
 			continue;
 
 		int tmp = find_readables(entry->d_name);
-		if (tmp < 0)
-			return tmp;
-		else
+		if (tmp < 0) {
+			readables = tmp;
+			break;
+		} else {
 			readables += tmp;
+		}
 	}
 
 	chdir("..");
@@ -104,7 +106,7 @@ int readable(char *inputPath)
 			fprintf(stderr, "%s\n", strerror(errno));
 			return -errno;
 		}
-		
+
 		closedir(dir);
 	}
 
