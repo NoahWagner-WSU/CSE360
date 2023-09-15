@@ -3,6 +3,6 @@
 int readable(char *inputPath);
 
 int main() {
-	readable("something");
+	printf("%d\n", readable(NULL));
 	return 0;
 }
