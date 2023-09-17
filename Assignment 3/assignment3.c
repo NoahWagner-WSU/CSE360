@@ -6,6 +6,17 @@
 #include <dirent.h>
 #include <stdio.h>
 
+/* Description:
+ * 	Recursively finds every regular readable file under inputPath
+ *
+ * Params:
+ *	inputPath: the path to start counting regular readable files
+ *
+ * Return:
+ * 	on success, return total number of regular readable files encountered
+ *	on failure, print errno message stderror and return the negative of
+ *	errno
+ */
 int find_readables(char *inputPath)
 {
 	struct stat area;
@@ -38,15 +49,15 @@ int find_readables(char *inputPath)
 		// no read permission sub-case
 		if (errno == EACCES)
 			return 0;
-		// something else went wrong sub-case
 		fprintf(stderr, "%s\n", strerror(errno));
 		return -errno;
 	}
 
+	// base case 5: failed to change directory to dir
 	if (chdir(inputPath) == -1) {
-		// no read permission sub-case
 		int tmp_error = errno;
 		closedir(dir);
+		// no execute permission sub-case
 		if (tmp_error == EACCES)
 			return 0;
 		fprintf(stderr, "%s\n", strerror(tmp_error));
@@ -57,13 +68,17 @@ int find_readables(char *inputPath)
 
 	int readables = 0;
 
-	// recursion: if we reached a searchable directory dir, readable(dir/file)
+	// recursion: if we reached a searchable directory...
 	while ((entry = readdir(dir)) != NULL) {
-		if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
+		// don't step into . or .., this leads to infinite loops
+		if (!strcmp(entry->d_name, ".") || 
+		    !strcmp(entry->d_name, ".."))
 			continue;
 
 		int tmp = find_readables(entry->d_name);
+
 		if (tmp < 0) {
+			// error occured, return the error code
 			readables = tmp;
 			break;
 		} else {
@@ -76,6 +91,18 @@ int find_readables(char *inputPath)
 	return readables;
 }
 
+/* Description:
+ * 	wrapper function for find_readables, checks for initial base cases
+ *
+ * Params:
+ *	inputPath: the path to start counting regular readable files, defaults
+ 		   to cwd if NULL is passed
+ *
+ * Return:
+ * 	on success, return the result from running find_readables(inputPath)
+ *	on failure, print errno message stderror and return the negative of
+ *	errno, fails if inputPath is a directory that cannot be read
+ */
 int readable(char *inputPath)
 {
 	char buffer[PATH_MAX] = {'\0'};
@@ -94,11 +121,13 @@ int readable(char *inputPath)
 	struct stat area;
 	struct stat *s = &area;
 
+	// try to get the state of the file or directory
 	if (lstat(inputPath, s) == -1) {
 		fprintf(stderr, "%s\n", strerror(errno));
 		return -errno;
 	}
 
+	// if we are a directory, check if we can read from it
 	if (S_ISDIR(s->st_mode)) {
 		DIR *dir = opendir(inputPath);
 
