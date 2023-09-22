@@ -21,8 +21,7 @@
  *	<arg1> is not.
  */
 
-
-int main(int argc, char **argv, char **envp)
+int main(int argc, char **argv)
 {
 	char **left_args = argv + 1;
 	char **right_args;
@@ -47,15 +46,13 @@ int main(int argc, char **argv, char **envp)
 		close(1); // close stdout
 		dup(wtr);
 		close(wtr);
-		// for some reason this execve call isn't working
-		execve(argv[1], left_args, envp);
-		// code can execute here, idk why
+		execvp(argv[1], left_args);
 	} else {
 		close(wtr);
 		close(0); // close stdin
 		dup(rdr);
 		close(rdr);
-		execve(argv[i + 1], right_args, envp);
+		execvp(argv[i + 1], right_args);
 	}
 	return 0;
 }
