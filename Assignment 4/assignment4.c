@@ -13,6 +13,12 @@
 #include <stdio.h>
 #include <errno.h>
 
+void my_exec(char *prog_path, char **argv) {
+	execvp(prog_path, argv);
+	fprintf(stderr, "%s\n", strerror(errno));
+	exit(errno);
+}
+
 /*
  * ./assignment4 <arg1> : <arg2>
  *	Where: <arg1> and <arg2> are optional parameters that specify the programs
@@ -20,20 +26,32 @@
  *	run as though there was not a colon. Same for if <arg2> is specified but
  *	<arg1> is not.
  */
-
 int main(int argc, char **argv)
 {
 	char **left_args = argv + 1;
-	char **right_args;
+	char **right_args = NULL;
 
 	int i = 1;
-	while(strcmp(argv[i], ":") && (i < argc - 1))
+	while(i < argc) {
+		if(!strcmp(argv[i], ":")) {
+			argv[i] = NULL;
+			break;
+		}
 		i++;
+	}
 
-	argv[i] = NULL;
+	if(++i < argc)
+		right_args = argv + i;
 
-	if(i + 1 < argc)
-		right_args = argv + i + 1;
+	if(!left_args[0] && !right_args) {
+		fprintf(stderr, "Usage: ./assignment4 <arg1> : <arg2>\n");
+		return EXIT_FAILURE;
+	}
+
+	if(!right_args)
+		my_exec(left_args[0], left_args);
+	else if(!left_args[0])
+		my_exec(right_args[0], right_args);
 
 	int fd[2];
 	int rdr, wtr;
@@ -41,18 +59,22 @@ int main(int argc, char **argv)
 	rdr = fd[0];
 	wtr = fd[1];
 
-	if(fork()) {
-		close(rdr);
-		close(1); // close stdout
-		dup(wtr);
-		close(wtr);
-		execvp(argv[1], left_args);
-	} else {
-		close(wtr);
-		close(0); // close stdin
-		dup(rdr);
-		close(rdr);
-		execvp(argv[i + 1], right_args);
+	switch(fork()) {
+		case -1:
+			fprintf(stderr, "%s\n", strerror(errno));
+			return errno;
+		case 0:
+			close(rdr);
+			close(1); // close stdout
+			dup(wtr);
+			close(wtr);
+			my_exec(left_args[0], left_args);
+		default:
+			close(wtr);
+			close(0); // close stdin
+			dup(rdr);
+			close(rdr);
+			my_exec(right_args[0], right_args);
 	}
 	return 0;
 }
