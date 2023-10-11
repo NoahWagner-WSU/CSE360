@@ -1,16 +1,34 @@
 #include <stdlib.h>
 #include <math.h>
-#include "random.h"
 #include <unistd.h>
+#include <stdio.h>
+#include <errno.h>
 
 /* successive calls to randomGaussian produce integer return values */
 /* having a gaussian distribution with the given mean and standard  */
 /* deviation.  Return values may be negative.                       */
 int randomGaussian(int mean, int stddev);
 
+void philosopher(int id);
+
 int main(int argc, char *argv[]){
-	/* code */
+	for(int i = 0; i < 5; i++) {
+		switch(fork()) {
+			case -1:
+				perror("Error: ");
+				return errno;
+			case 0:
+				philosopher(i);
+				return 0;
+			default:
+				break;
+		}
+	}
 	return 0;
+}
+
+void philosopher(int id) {
+	printf("I philosopher %d\n", id);
 }
 
 int randomGaussian(int mean, int stddev) {
