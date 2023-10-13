@@ -14,7 +14,8 @@ int randomGaussian(int mean, int stddev);
 
 void philosopher(int id, int sem_id, struct sembuf **actions);
 
-int main(int argc, char *argv[]){
+int main(int argc, char *argv[])
+{
 	struct sembuf get01[2] = {{0, -1, 0}, {1, -1, 0}};
 	struct sembuf get12[2] = {{1, -1, 0}, {2, -1, 0}};
 	struct sembuf get23[2] = {{2, -1, 0}, {3, -1, 0}};
@@ -70,7 +71,8 @@ int main(int argc, char *argv[]){
 	return 0;
 }
 
-void philosopher(int id, int sem_id, struct sembuf **actions) {
+void philosopher(int id, int sem_id, struct sembuf **actions) 
+{
 	int total_eat_time = 0;
 	while(total_eat_time < 100) {
 		// think
@@ -98,7 +100,8 @@ void philosopher(int id, int sem_id, struct sembuf **actions) {
 	printf("Philosopher %d finished eating\n", id);
 }
 
-int randomGaussian(int mean, int stddev) {
+int randomGaussian(int mean, int stddev) 
+{
 	double mu = 0.5 + (double) mean;
 	double sigma = fabs((double) stddev);
 	double f1 = sqrt(-2.0 * log((double) rand() / (double) RAND_MAX));
