@@ -26,6 +26,8 @@ int main(int argc, char *argv[]){
 	struct sembuf set34[2] = {{3, 1, 0}, {4, 1, 0}};
 	struct sembuf set40[2] = {{4, 1, 0}, {0, 1, 0}};
 
+	struct sembuf set4[2] = {{4, 1, 0}};
+
 	struct sembuf *actions[10] = {
 		get01, 
 		get12, 
@@ -45,7 +47,7 @@ int main(int argc, char *argv[]){
 
 	semop(sem_id, actions[5], 2);
 	semop(sem_id, actions[7], 2);
-	semop(sem_id, actions[9], 2);
+	semop(sem_id, set4, 1);
 
 	for(int i = 0; i < 5; i++) {
 		switch(fork()) {
@@ -70,7 +72,7 @@ int main(int argc, char *argv[]){
 
 void philosopher(int id, int sem_id, struct sembuf **actions) {
 	int total_eat_time = 0;
-	while(total_eat_time < 20) {
+	while(total_eat_time < 100) {
 		// think
 		int think_time = randomGaussian(11, 7);
 		if(think_time < 0) 
@@ -92,6 +94,8 @@ void philosopher(int id, int sem_id, struct sembuf **actions) {
 		// release chopsticks
 		semop(sem_id, actions[id + 5], 2);
 	}
+
+	printf("Philosopher %d finished eating\n", id);
 }
 
 int randomGaussian(int mean, int stddev) {
