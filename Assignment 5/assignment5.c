@@ -86,7 +86,9 @@ int main(int argc, char *argv[])
 	int status = 0;
 	while(wait(&status) > 0);
 
-	// NOTE: FREE THE SEMAPHORES!!!!
+	// free the semaphore set
+	semctl(sem_id, 0, IPC_RMID);
+	
 	return 0;
 }
 
