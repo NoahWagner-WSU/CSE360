@@ -85,10 +85,7 @@ int main(int argc, char *argv[])
 	while (wait(&status) > 0);
 
 	// free the semaphore set
-	if(semctl(sem_id, 0, IPC_RMID) == -1) {
-		fprintf(stderr, "Error %d: %s\n", errno, strerror(errno));
-		return errno;	
-	}
+	semctl(sem_id, 0, IPC_RMID)
 
 	return 0;
 }
