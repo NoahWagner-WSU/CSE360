@@ -8,6 +8,9 @@
 #include <sys/wait.h>
 #include <string.h>
 
+#define PHILOSOPHERS 5
+#define TOTAL_EAT_SEC 100
+
 /* Description:
  *	successive calls to randomGaussian produce integer return values
  *	having a gaussian distribution with the given mean and standard
@@ -32,7 +35,7 @@ int randomGaussian(int mean, int stddev);
  *
  * Params:
  *	id: the id of the philosopher (used to tell which chopsticks to use)
- *	sem_id: the id of the 5 semaphores (each representing a chopstick)
+ *	sem_id: the id of the semaphores (each representing a chopstick)
  *	get_both: a sembuf that will decrement adjacent semaphores
  *	set_both: a sembuf that will increment adjacent semaphores
  *
@@ -40,9 +43,9 @@ int randomGaussian(int mean, int stddev);
  *	0 on success, or errno if some error occured
  */
 int philosopher(int id,
-                 int sem_id,
-                 struct sembuf *get_both,
-                 struct sembuf *set_both);
+                int sem_id,
+                struct sembuf *get_both,
+                struct sembuf *set_both);
 
 int main(int argc, char *argv[])
 {
@@ -50,33 +53,30 @@ int main(int argc, char *argv[])
 	struct sembuf get_both[2] = {{0, -1, 0}, {0, -1, 0}};
 	struct sembuf set_both[2] = {{0, 1, 0}, {0, 1, 0}};
 
-	// used to initialize all the semaphores to 1
-	struct sembuf set_all[5] = {
-		{0, 1, 0},
-		{1, 1, 0},
-		{2, 1, 0},
-		{3, 1, 0},
-		{4, 1, 0}
-	};
+	// used to initialize all semaphores to 1
+	struct sembuf set[1] = {{0, 1, 0}};
 
 	// initialize all the semaphores, each representing a chopstick
-	int sem_id = semget(IPC_PRIVATE, 5, IPC_CREAT | IPC_EXCL | 0600);
+	int sem_id = semget(IPC_PRIVATE, PHILOSOPHERS, IPC_CREAT | IPC_EXCL | 0600);
 
-	if(sem_id == -1) {
+	if (sem_id == -1) {
 		fprintf(stderr, "Error %d: %s\n", errno, strerror(errno));
 		return errno;
 	}
 
 	// set all semaphores to 1
-	if(semop(sem_id, set_all, 5) == -1) {
-		fprintf(stderr, "Error %d: %s\n", errno, strerror(errno));
-		return errno;
+	for (int i = 0; i < PHILOSOPHERS; i++) {
+		set[0].sem_num = i;
+		if (semop(sem_id, set, 1) == -1) {
+			fprintf(stderr, "Error %d: %s\n", errno, strerror(errno));
+			return errno;
+		}
 	}
 
 	// fork each child process, each running philosopher()
-	for (int i = 0; i < 5; i++) {
+	for (int i = 0; i < PHILOSOPHERS; i++) {
 		int pid = fork();
-		if (pid == 0) 
+		if (pid == 0)
 			return philosopher(i, sem_id, get_both, set_both);
 	}
 
@@ -85,20 +85,20 @@ int main(int argc, char *argv[])
 	while (wait(&status) > 0);
 
 	// free the semaphore set
-	semctl(sem_id, 0, IPC_RMID)
+	semctl(sem_id, 0, IPC_RMID);
 
 	return 0;
 }
 
 int philosopher(int id,
-                 int sem_id,
-                 struct sembuf *get_both,
-                 struct sembuf *set_both)
+                int sem_id,
+                struct sembuf *get_both,
+                struct sembuf *set_both)
 {
 	struct timespec curr_time;
 
 	// seed the random function based off of current time
-	if(clock_gettime(CLOCK_MONOTONIC_RAW, &curr_time) == -1) {
+	if (clock_gettime(CLOCK_MONOTONIC_RAW, &curr_time) == -1) {
 		fprintf(stderr, "Error %d: %s\n", errno, strerror(errno));
 		return errno;
 	}
@@ -106,15 +106,15 @@ int philosopher(int id,
 
 	// change the get id's to be the semaphores adjacent to my id
 	get_both[0].sem_num = id;
-	get_both[1].sem_num = (id + 1) % 5;
+	get_both[1].sem_num = (id + 1) % PHILOSOPHERS;
 
 	// change the set id's to be the semaphores adjacent to my id
 	set_both[0].sem_num = id;
-	set_both[1].sem_num = (id + 1) % 5;
+	set_both[1].sem_num = (id + 1) % PHILOSOPHERS;
 
 	int total_eat_time = 0;
 	int total_think_time = 0;
-	while (total_eat_time < 100) {
+	while (total_eat_time < TOTAL_EAT_SEC) {
 		// think
 		int think_time = randomGaussian(11, 7);
 		if (think_time < 0)
@@ -125,7 +125,7 @@ int philosopher(int id,
 		total_think_time += think_time;
 
 		// try to grab both chop-sticks
-		if(semop(sem_id, get_both, 2) == -1) {
+		if (semop(sem_id, get_both, 2) == -1) {
 			fprintf(stderr, "Error %d: %s\n", errno, strerror(errno));
 			return errno;
 		}
@@ -140,7 +140,7 @@ int philosopher(int id,
 		total_eat_time += eat_time;
 
 		// release chopsticks
-		if(semop(sem_id, set_both, 2) == -1) {
+		if (semop(sem_id, set_both, 2) == -1) {
 			fprintf(stderr, "Error %d: %s\n", errno, strerror(errno));
 			return errno;
 		}
