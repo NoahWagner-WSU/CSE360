@@ -48,6 +48,8 @@ void *philosopher(void *args);
 int main(int argc, char *argv[])
 {
 	pthread_t threads[PHILOSOPHERS];
+	// NOTE: I might not need all these chopsticks if I use cond_wait
+	// NOTE: replace with an array of chopsticks instead
 	pthread_mutex_t *chopsticks;
 
 	// initialize the chopsticks on the heap
@@ -106,7 +108,7 @@ void *philosopher(void *args)
 
 		total_think_time += think_time;
 
-		// grab args->id + 1 mod 5 first, then grab args-> id
+		// NOTE: write a function that grabs both or one chopsticks, make it act like semop() using cond_wait
 
 		// eat
 		int eat_time = randomGaussian(9, 3);
@@ -117,7 +119,7 @@ void *philosopher(void *args)
 
 		total_eat_time += eat_time;
 
-		// release both mutexes
+		// NOTE: release both chopsticks (lock and unlock mutex) make a function to do this
 	}
 	free(args);
 	printf("Philosopher %d finished eating (think total: %d, eat total: %d)\n", id, total_think_time, total_eat_time);
