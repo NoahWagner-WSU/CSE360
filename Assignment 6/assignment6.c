@@ -53,6 +53,11 @@ int main(int argc, char *argv[])
 	// initialize the chopsticks on the heap
 	chopsticks = malloc(sizeof(*chopsticks) * PHILOSOPHERS);
 
+	// initialize the mutexes
+	for (int i = 0; i < PHILOSOPHERS; ++i) {
+		pthread_mutex_init(&chopsticks[i], NULL);
+	}
+
 	// initialize all philosophers
 	for (int i = 0; i < PHILOSOPHERS; i++) {
 		struct thread_arg *args = malloc(sizeof(*args));
@@ -66,6 +71,8 @@ int main(int argc, char *argv[])
 		pthread_join(threads[i], NULL);
 	}
 
+	// NOTE: call pthread_mutex_destroy here?
+
 	// cleanup the mutexes
 	free(chopsticks);
 
@@ -77,7 +84,7 @@ void *philosopher(void *args)
 {
 	int id = ((struct thread_arg *)args)->id;
 	pthread_mutex_t *chopsticks = ((struct thread_arg *)args)->chopsticks;
-	
+
 	struct timespec curr_time;
 
 	// seed the random function based off of current time
