@@ -10,9 +10,12 @@
 #define PHILOSOPHERS 5
 #define TOTAL_EAT_SEC 100
 
+// the thread function argument, contents are described below
 struct thread_arg {
 	int id;
-	pthread_mutex_t *chopsticks;
+	int *chops;
+	pthread_cond_t *cond;
+	pthread_mutex_t *mutex;
 };
 
 /* Description:
@@ -30,42 +33,85 @@ struct thread_arg {
 int randomGaussian(int mean, int stddev);
 
 /* Description:
- *	the behavior of every philosopher at a dinner table. Each eats for
- *	a random amount of time, then thinks for a random amount of time.
- *	The philosopher is done eating when they eat for a total of 100
- *	seconds. In order to eat, each philosopher must obtain both chopsticks
- *	to the let and right of them. NOTE: add statement specifying method
- *	used to avoid race conditions
+ *	simulates the behavior of every philosopher at a dinner table. Each
+ *	eats for a random amount of time, then thinks for a random amount
+ *	of time. The philosopher is done eating when they eat for a total of
+ *	100 seconds. In order to eat, each philosopher must obtain both
+ *	chopsticks to the let and right of them. To avoid deadlocks, picking
+ *	up the two adjacent chopsticks is made atomic through mutexes
+ *	and conditional variables.
  *
  * Params:
- *
- *
+ *	Recieves a thread arg struct that contains the following members:
+ *	id: the id of the philosopher, corresponds to a position on the table
+ *	chops: an array of chopsticks on the table, each index representing the
+ *	       number of available chopsticks (0 or 1)
+ *	cond: the conditional variable used to notify philosophers to check 
+ *	      for chopsticks
+ *	mutex: the mutex used to syncronize threads
  * Return:
- *
+ *	NULL always
  */
 void *philosopher(void *args);
+
+/* Description:
+ *	Simulates grabing both adjacent chopsticks if they are available.
+ *	If both aren't available, this function will block execution of calling
+ *	thread. Only returns if both chopsticks are picked up.
+ *
+ * Params:
+ *	Takes the same thread_arg as the calling thread. Only uses id, 
+ *	cond, and mutex members.
+ *	
+ * Return:
+ *	nothing
+ */
+void grab_chops(struct thread_arg *);
+
+/* Description:
+ *	Simulates setting both adjacent chopsticks down. Notifies all other
+ *	threads currently waiting on the conditional variable "cond" after
+ *	setting both chopsticks down. Philosophers currently waiting in
+ *	grab_chops will be signaled to check if their adjacent chopsticks
+ *	are available.
+ *
+ * Params:
+ *	Takes the same thread_arg as the calling thread. Only uses id, 
+ *	cond, and mutex members.
+ *
+ * Return:
+ *	nothing
+ */
+void release_chops(struct thread_arg *);
 
 int main(int argc, char *argv[])
 {
 	pthread_t threads[PHILOSOPHERS];
-	// NOTE: I might not need all these chopsticks if I use cond_wait
-	// NOTE: replace with an array of chopsticks instead (actually just an array of philo states, 0 for waiting and 1 for eating and 2 for thinking)
-	// NOTE: I'll probably have to have an array of cond_wait vars instead, one for each philosopher
-	pthread_mutex_t *chopsticks;
+	// array of all chopsticks
+	int *chopsticks;
 
 	// initialize the chopsticks on the heap
 	chopsticks = malloc(sizeof(*chopsticks) * PHILOSOPHERS);
 
-	// initialize the mutexes
+	pthread_cond_t *cond = malloc(sizeof(*cond));
+	pthread_mutex_t *mutex = malloc(sizeof(*mutex));
+
+	// initialize mutex and conditional variable
+	pthread_cond_init(cond, NULL);
+	pthread_mutex_init(mutex, NULL);
+
+	// initialize the chopsticks (1 for available)
 	for (int i = 0; i < PHILOSOPHERS; ++i) {
-		pthread_mutex_init(&chopsticks[i], NULL);
+		chopsticks[i] = 1;
 	}
 
 	// initialize all philosophers
 	for (int i = 0; i < PHILOSOPHERS; i++) {
 		struct thread_arg *args = malloc(sizeof(*args));
 		args->id = i;
-		args->chopsticks = chopsticks;
+		args->chops = chopsticks;
+		args->cond = cond;
+		args->mutex = mutex;
 		pthread_create(&threads[i], NULL, philosopher, (void *)args);
 	}
 
@@ -74,19 +120,20 @@ int main(int argc, char *argv[])
 		pthread_join(threads[i], NULL);
 	}
 
-	// NOTE: call pthread_mutex_destroy here?
+	// cleanup the chopsticks, mutex and conditional variable
+	pthread_mutex_destroy(mutex);
+	pthread_cond_destroy(cond);
 
-	// cleanup the mutexes
 	free(chopsticks);
+	free(cond);
+	free(mutex);
 
-	// initialize each philosopher on a
 	return 0;
 }
 
 void *philosopher(void *args)
 {
-	int id = ((struct thread_arg *)args)->id;
-	pthread_mutex_t *chopsticks = ((struct thread_arg *)args)->chopsticks;
+	struct thread_arg *func_args = (struct thread_arg *)args;
 
 	struct timespec curr_time;
 
@@ -104,30 +151,69 @@ void *philosopher(void *args)
 		int think_time = randomGaussian(11, 7);
 		if (think_time < 0)
 			think_time = 0;
-		printf("Philosopher %d is thinking for %d seconds... (current total: %d)\n", id, think_time, total_think_time);
+		printf("Philosopher %d is thinking for %d seconds... (current total: %d)\n", 
+			func_args->id, think_time, total_think_time);
 		sleep(think_time);
 
 		total_think_time += think_time;
 
-		// NOTE: write a function that grabs both or no chopsticks, make it act like semop() using cond_wait
-		// NOTE: attempt_grab() will block if can't grab, it'll do this by checking an array of philo states (eating or not eating)
-		// NOTE: it will check the adjacent two philospher states, and if they are eating, we will wait using cond_wait
+		// try to grab chopsticks, wait here until we can
+		grab_chops(func_args);
 
 		// eat
 		int eat_time = randomGaussian(9, 3);
 		if (eat_time < 0)
 			eat_time = 0;
-		printf("Philosopher %d is eating for %d seconds... (current total: %d)\n", id, eat_time, total_eat_time);
+		printf("Philosopher %d is eating for %d seconds... (current total: %d)\n", 
+			func_args->id, eat_time, total_eat_time);
 		sleep(eat_time);
 
 		total_eat_time += eat_time;
 
-		// NOTE: release both chopsticks (lock and unlock mutex) make a function to do this (signal adjacent philosophers that we are done)
-		// NOTE: call cond_signal to tell adjacent philosophers that they can eat (only if they are waiting, not thinking, otherwise the cond var will be incremented)
-		// NOTE: update the philosophers state in the state array
+		// make the chopsticks available to other philosophers
+		release_chops(func_args);
 	}
+	printf("Philosopher %d finished eating (think total: %d, eat total: %d)\n", 
+		func_args->id, total_think_time, total_eat_time);
 	free(args);
-	printf("Philosopher %d finished eating (think total: %d, eat total: %d)\n", id, total_think_time, total_eat_time);
+}
+
+void grab_chops(struct thread_arg *args) 
+{
+	pthread_mutex_lock(args->mutex);
+
+	// find the adjacent chopsticks 
+	int chop1 = args->id;
+	int chop2 = (args->id + 1) % PHILOSOPHERS;
+
+	// keep waiting as long as both chopsticks aren't available
+	while(args->chops[chop1] != 1 || args->chops[chop2] != 1) {
+		pthread_cond_wait(args->cond, args->mutex);
+	}
+
+	// take chopsticks
+	args->chops[chop1] = 0;
+	args->chops[chop2] = 0;
+
+	pthread_mutex_unlock(args->mutex);
+}
+
+void release_chops(struct thread_arg *args) 
+{
+	pthread_mutex_lock(args->mutex);
+
+	// find the adjacent chopsticks
+	int chop1 = args->id;
+	int chop2 = (args->id + 1) % PHILOSOPHERS;
+
+	// put down the chopsticks
+	args->chops[chop1] = 1;
+	args->chops[chop2] = 1;
+
+	// tell everyone that these chopsticks are available
+	pthread_cond_broadcast(args->cond);
+
+	pthread_mutex_unlock(args->mutex);
 }
 
 int randomGaussian(int mean, int stddev)
