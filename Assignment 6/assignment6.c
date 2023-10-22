@@ -46,7 +46,7 @@ int randomGaussian(int mean, int stddev);
  *	id: the id of the philosopher, corresponds to a position on the table
  *	chops: an array of chopsticks on the table, each index representing the
  *	       number of available chopsticks (0 or 1)
- *	cond: the conditional variable used to notify philosophers to check 
+ *	cond: the conditional variable used to notify philosophers to check
  *	      for chopsticks
  *	mutex: the mutex used to syncronize threads
  * Return:
@@ -60,9 +60,9 @@ void *philosopher(void *args);
  *	thread. Only returns if both chopsticks are picked up.
  *
  * Params:
- *	Takes the same thread_arg as the calling thread. Only uses id, 
+ *	Takes the same thread_arg as the calling thread. Only uses id,
  *	cond, and mutex members.
- *	
+ *
  * Return:
  *	nothing
  */
@@ -76,7 +76,7 @@ void grab_chops(struct thread_arg *);
  *	are available.
  *
  * Params:
- *	Takes the same thread_arg as the calling thread. Only uses id, 
+ *	Takes the same thread_arg as the calling thread. Only uses id,
  *	cond, and mutex members.
  *
  * Return:
@@ -96,9 +96,21 @@ int main(int argc, char *argv[])
 	pthread_cond_t *cond = malloc(sizeof(*cond));
 	pthread_mutex_t *mutex = malloc(sizeof(*mutex));
 
-	// initialize mutex and conditional variable
-	pthread_cond_init(cond, NULL);
-	pthread_mutex_init(mutex, NULL);
+	int error = 0;
+
+	// initialize the conditional variable
+	if (error = pthread_cond_init(cond, NULL)) {
+		fprintf(stderr, "Conditional Variable Error %d: %s\n", error,
+		        strerror(error));
+		return error;
+	}
+
+	// initialize the mutex variable
+	if (error = pthread_mutex_init(mutex, NULL)) {
+		fprintf(stderr, "Mutex Error %d: %s\n", error,
+		        strerror(error));
+		return error;
+	}
 
 	// initialize the chopsticks (1 for available)
 	for (int i = 0; i < PHILOSOPHERS; ++i) {
@@ -112,12 +124,22 @@ int main(int argc, char *argv[])
 		args->chops = chopsticks;
 		args->cond = cond;
 		args->mutex = mutex;
-		pthread_create(&threads[i], NULL, philosopher, (void *)args);
+		error = pthread_create(&threads[i], NULL, philosopher,
+		                       (void *)args);
+		if (error) {
+			fprintf(stderr, "Thread Creation Error %d: %s\n",
+			        error, strerror(error));
+			return error;
+		}
 	}
 
 	// wait for all philosophers
 	for (int i = 0; i < PHILOSOPHERS; ++i) {
-		pthread_join(threads[i], NULL);
+		if (error = pthread_join(threads[i], NULL)) {
+			fprintf(stderr, "Thread Join Error %d: %s\n", error,
+			        strerror(error));
+			return error;
+		}
 	}
 
 	// cleanup the chopsticks, mutex and conditional variable
@@ -139,7 +161,8 @@ void *philosopher(void *args)
 
 	// seed the random function based off of current time
 	if (clock_gettime(CLOCK_MONOTONIC_RAW, &curr_time) == -1) {
-		fprintf(stderr, "Error %d: %s\n", errno, strerror(errno));
+		fprintf(stderr, "Clock Error %d: %s\n", errno,
+		        strerror(errno));
 		return NULL;
 	}
 	srand(curr_time.tv_nsec);
@@ -151,8 +174,8 @@ void *philosopher(void *args)
 		int think_time = randomGaussian(11, 7);
 		if (think_time < 0)
 			think_time = 0;
-		printf("Philosopher %d is thinking for %d seconds... (current total: %d)\n", 
-			func_args->id, think_time, total_think_time);
+		printf("Philosopher %d is thinking for %d seconds... (current total: %d)\n",
+		       func_args->id, think_time, total_think_time);
 		sleep(think_time);
 
 		total_think_time += think_time;
@@ -164,8 +187,8 @@ void *philosopher(void *args)
 		int eat_time = randomGaussian(9, 3);
 		if (eat_time < 0)
 			eat_time = 0;
-		printf("Philosopher %d is eating for %d seconds... (current total: %d)\n", 
-			func_args->id, eat_time, total_eat_time);
+		printf("Philosopher %d is eating for %d seconds... (current total: %d)\n",
+		       func_args->id, eat_time, total_eat_time);
 		sleep(eat_time);
 
 		total_eat_time += eat_time;
@@ -173,34 +196,55 @@ void *philosopher(void *args)
 		// make the chopsticks available to other philosophers
 		release_chops(func_args);
 	}
-	printf("Philosopher %d finished eating (think total: %d, eat total: %d)\n", 
-		func_args->id, total_think_time, total_eat_time);
+	printf("Philosopher %d finished eating (think total: %d, eat total: %d)\n",
+	       func_args->id, total_think_time, total_eat_time);
 	free(args);
+	return NULL;
 }
 
-void grab_chops(struct thread_arg *args) 
+void grab_chops(struct thread_arg *args)
 {
-	pthread_mutex_lock(args->mutex);
+	int error = pthread_mutex_lock(args->mutex);
 
-	// find the adjacent chopsticks 
+	if (error) {
+		fprintf(stderr, "Mutex Lock Error %d: %s\n", error,
+		        strerror(error));
+		pthread_exit(NULL);
+	}
+
+	// find the adjacent chopsticks
 	int chop1 = args->id;
 	int chop2 = (args->id + 1) % PHILOSOPHERS;
 
 	// keep waiting as long as both chopsticks aren't available
-	while(args->chops[chop1] != 1 || args->chops[chop2] != 1) {
-		pthread_cond_wait(args->cond, args->mutex);
+	while (args->chops[chop1] != 1 || args->chops[chop2] != 1) {
+		if(error = pthread_cond_wait(args->cond, args->mutex)) {
+			fprintf(stderr, "Conditional Wait Error %d: %s\n", 
+			        error, strerror(error));
+			pthread_exit(NULL);
+		}
 	}
 
 	// take chopsticks
 	args->chops[chop1] = 0;
 	args->chops[chop2] = 0;
 
-	pthread_mutex_unlock(args->mutex);
+	if (error = pthread_mutex_unlock(args->mutex)) {
+		fprintf(stderr, "Mutex Lock Error %d: %s\n", error,
+		        strerror(error));
+		pthread_exit(NULL);
+	}
 }
 
-void release_chops(struct thread_arg *args) 
+void release_chops(struct thread_arg *args)
 {
-	pthread_mutex_lock(args->mutex);
+	int error = pthread_mutex_lock(args->mutex);
+
+	if (error) {
+		fprintf(stderr, "Mutex Lock Error %d: %s\n", error,
+		        strerror(error));
+		pthread_exit(NULL);
+	}
 
 	// find the adjacent chopsticks
 	int chop1 = args->id;
@@ -211,9 +255,17 @@ void release_chops(struct thread_arg *args)
 	args->chops[chop2] = 1;
 
 	// tell everyone that these chopsticks are available
-	pthread_cond_broadcast(args->cond);
+	if(error = pthread_cond_broadcast(args->cond)) {
+		fprintf(stderr, "Conditional Broadcast Error %d: %s\n", error,
+		        strerror(error));
+		pthread_exit(NULL);
+	}
 
-	pthread_mutex_unlock(args->mutex);
+	if (error = pthread_mutex_unlock(args->mutex)) {
+		fprintf(stderr, "Mutex Lock Error %d: %s\n", error,
+		        strerror(error));
+		pthread_exit(NULL);
+	}
 }
 
 int randomGaussian(int mean, int stddev)
