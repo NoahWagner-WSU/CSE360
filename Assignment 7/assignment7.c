@@ -9,15 +9,19 @@ typedef struct _sortParams {
     char** array;
     int left;
     int right;
+    int *avail_threads;
 } SortParams;
 
 static int maximumThreads;              /* maximum # of threads to be used */
+
+static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* This is an implementation of insert sort, which although it is */
 /* n-squared, is faster at sorting short lists than quick sort,   */
 /* due to its lack of recursive procedure call overhead.          */
 
-static void insertSort(char** array, int left, int right) {
+static void insertSort(char** array, int left, int right) 
+{
     int i, j;
     for (i = left + 1; i <= right; i++) {
         char* pivot = array[i];
@@ -33,12 +37,14 @@ static void insertSort(char** array, int left, int right) {
 /* Recursive quick sort, but with a provision to use */
 /* insert sort when the range gets small.            */
 
-static void quickSort(void* p) {
+static void quickSort(void* p) 
+{
     SortParams* params = (SortParams*) p;
     char** array = params->array;
     int left = params->left;
     int right = params->right;
     int i = left, j = right;
+    int *avail_threads = params->avail_threads;
     
     if (j - i > SORT_THRESHOLD) {           /* if the sort range is substantial, use quick sort */
 
@@ -67,25 +73,66 @@ static void quickSort(void* p) {
             } else break;                   /* if i > j, this partitioning is done  */
         }
         
-        SortParams first;  first.array = array; first.left = left; first.right = j;
-        quickSort(&first);                  /* sort the left partition  */
+        SortParams *args = malloc(sizeof(*args) * 2);  
+        args[0].array = array; 
+        args[0].left = left; 
+        args[0].right = j;
+        args[0].avail_threads = avail_threads;
+
+        args[1].array = array; 
+        args[1].left = i; 
+        args[1].right = right;
+        args[1].avail_threads = avail_threads;
+
+        // keep track of current threads, and create a new thread here if we have less than a max amount
+        // if we can create a thread, increment thread count, and run quickSort on another thread
+        // else, just run the function on the calling thread
+
+        pthread_t thread;
+        int wait = 0;
+        pthread_mutex_lock(&mutex);
+        if(*avail_threads > 0) {
+            (*avail_threads)--;
+            pthread_mutex_unlock(&mutex);
+            pthread_create(&thread, NULL, (void *) quickSort, (void *) &(args[0]));
+            wait = 1;
+        } else {
+            pthread_mutex_unlock(&mutex);
+            quickSort(&args[0]);
+        }
+        pthread_mutex_unlock(&mutex);
+
+        quickSort(&args[1]);
         
-        SortParams second; second.array = array; second.left = i; second.right = right;
-        quickSort(&second);                 /* sort the right partition */
+        if(wait)
+            pthread_join(thread, NULL);
+
+        free(args);
+
+        // wait here for above threads to finish (if any where created)
+        // increment available threads if we joined a previous one
                 
     } else insertSort(array,i,j);           /* for a small range use insert sort */
 }
 
 /* user interface routine to set the number of threads sortT is permitted to use */
 
-void setSortThreads(int count) {
+void setSortThreads(int count) 
+{
     maximumThreads = count;
 }
 
 /* user callable sort procedure, sorts array of count strings, beginning at address array */
 
-void sortThreaded(char** array, unsigned int count) {
+void sortThreaded(char** array, unsigned int count) 
+{
     SortParams parameters;
-    parameters.array = array; parameters.left = 0; parameters.right = count - 1;
+    parameters.array = array; 
+    parameters.left = 0; 
+    parameters.right = count - 1;
+    parameters.avail_threads = malloc(sizeof(*parameters.avail_threads));
+    *(parameters.avail_threads) = maximumThreads;
     quickSort(&parameters);
+    free(parameters.avail_threads);
+    pthread_mutex_destroy(&mutex);
 }

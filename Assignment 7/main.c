@@ -64,7 +64,7 @@ int main(int argc, char **argv)
 
 	clock_t before_time = clock();
 
-	setSortThreads(1);
+	setSortThreads(4);
 	sortThreaded(words, word_count);
 
 	printf("Total time: %f seconds\n", (double)(clock() - before_time) / CLOCKS_PER_SEC);
