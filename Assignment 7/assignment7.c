@@ -73,41 +73,46 @@ static void quickSort(void* p)
             } else break;                   /* if i > j, this partitioning is done  */
         }
         
-        SortParams *args = malloc(sizeof(*args) * 2);  
-        args[0].array = array; 
-        args[0].left = left; 
-        args[0].right = j;
-        args[0].avail_threads = avail_threads;
+        SortParams first, second;  
+        first.array = array; 
+        first.left = left; 
+        first.right = j;
+        first.avail_threads = avail_threads;
 
-        args[1].array = array; 
-        args[1].left = i; 
-        args[1].right = right;
-        args[1].avail_threads = avail_threads;
+        second.array = array; 
+        second.left = i; 
+        second.right = right;
+        second.avail_threads = avail_threads;
 
         // keep track of current threads, and create a new thread here if we have less than a max amount
         // if we can create a thread, increment thread count, and run quickSort on another thread
         // else, just run the function on the calling thread
 
         pthread_t thread;
-        int wait = 0;
+        int run_threaded = 0;
         pthread_mutex_lock(&mutex);
         if(*avail_threads > 0) {
+            run_threaded = 1;
             (*avail_threads)--;
-            pthread_mutex_unlock(&mutex);
-            pthread_create(&thread, NULL, (void *) quickSort, (void *) &(args[0]));
-            wait = 1;
-        } else {
-            pthread_mutex_unlock(&mutex);
-            quickSort(&args[0]);
         }
         pthread_mutex_unlock(&mutex);
 
-        quickSort(&args[1]);
-        
-        if(wait)
-            pthread_join(thread, NULL);
+        SortParams *arg;
 
-        free(args);
+        if(run_threaded) {
+            arg = malloc(sizeof(*arg));
+            *arg = first;
+            pthread_create(&thread, NULL, (void *)quickSort, (void *)arg);
+        } else {
+            quickSort((void *)&first);
+        }
+
+        quickSort((void *)&second);
+        
+        if(run_threaded) {
+            pthread_join(thread, NULL);
+            free(arg);
+        }
 
         // wait here for above threads to finish (if any where created)
         // increment available threads if we joined a previous one
