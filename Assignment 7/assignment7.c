@@ -9,12 +9,10 @@ typedef struct _sortParams {
     char** array;
     int left;
     int right;
-    int *avail_threads;
+    int avail_threads;
 } SortParams;
 
 static int maximumThreads;              /* maximum # of threads to be used */
-
-static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /* This is an implementation of insert sort, which although it is */
 /* n-squared, is faster at sorting short lists than quick sort,   */
@@ -44,7 +42,7 @@ static void quickSort(void* p)
     int left = params->left;
     int right = params->right;
     int i = left, j = right;
-    int *avail_threads = params->avail_threads;
+    int avail_threads = params->avail_threads - 1;
     
     if (j - i > SORT_THRESHOLD) {           /* if the sort range is substantial, use quick sort */
 
@@ -77,29 +75,22 @@ static void quickSort(void* p)
         first.array = array; 
         first.left = left; 
         first.right = j;
-        first.avail_threads = avail_threads;
+        first.avail_threads = avail_threads / 2;
 
         second.array = array; 
         second.left = i; 
         second.right = right;
-        second.avail_threads = avail_threads;
+        second.avail_threads = avail_threads - first.avail_threads;
 
         // keep track of current threads, and create a new thread here if we have less than a max amount
         // if we can create a thread, increment thread count, and run quickSort on another thread
         // else, just run the function on the calling thread
 
         pthread_t thread;
-        int run_threaded = 0;
-        pthread_mutex_lock(&mutex);
-        if(*avail_threads > 0) {
-            run_threaded = 1;
-            (*avail_threads)--;
-        }
-        pthread_mutex_unlock(&mutex);
 
         SortParams *arg;
 
-        if(run_threaded) {
+        if(avail_threads >= 0) {
             arg = malloc(sizeof(*arg));
             *arg = first;
             pthread_create(&thread, NULL, (void *)quickSort, (void *)arg);
@@ -109,7 +100,7 @@ static void quickSort(void* p)
 
         quickSort((void *)&second);
         
-        if(run_threaded) {
+        if(avail_threads >= 0) {
             pthread_join(thread, NULL);
             free(arg);
         }
@@ -135,9 +126,6 @@ void sortThreaded(char** array, unsigned int count)
     parameters.array = array; 
     parameters.left = 0; 
     parameters.right = count - 1;
-    parameters.avail_threads = malloc(sizeof(*parameters.avail_threads));
-    *(parameters.avail_threads) = maximumThreads;
+    parameters.avail_threads = maximumThreads;
     quickSort(&parameters);
-    free(parameters.avail_threads);
-    pthread_mutex_destroy(&mutex);
 }
