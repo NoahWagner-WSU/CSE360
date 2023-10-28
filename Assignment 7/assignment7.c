@@ -71,6 +71,7 @@ static void quickSort(void* p)
             } else break;                   /* if i > j, this partitioning is done  */
         }
         
+        // allocate sort params on heap by default
         SortParams first, second;  
         first.array = array; 
         first.left = left; 
@@ -82,14 +83,11 @@ static void quickSort(void* p)
         second.right = right;
         second.avail_threads = avail_threads - first.avail_threads;
 
-        // keep track of current threads, and create a new thread here if we have less than a max amount
-        // if we can create a thread, increment thread count, and run quickSort on another thread
-        // else, just run the function on the calling thread
-
         pthread_t thread;
 
         SortParams *arg;
 
+        // sort an new thread if we have the threads to do so
         if(avail_threads >= 0) {
             arg = malloc(sizeof(*arg));
             *arg = first;
@@ -98,15 +96,14 @@ static void quickSort(void* p)
             quickSort((void *)&first);
         }
 
+        // sort the other half on this thread
         quickSort((void *)&second);
         
+        // if we sorted on a new thread, wait for it to finish
         if(avail_threads >= 0) {
             pthread_join(thread, NULL);
             free(arg);
         }
-
-        // wait here for above threads to finish (if any where created)
-        // increment available threads if we joined a previous one
                 
     } else insertSort(array,i,j);           /* for a small range use insert sort */
 }
