@@ -15,11 +15,10 @@
 #define BACK_LOG 1
 
 void server();
-void client(char *address);
+void client(const char *address);
 
 int main(int argc, char **argv)
 {
-	// parse argv here, run client / server depending on argv[1]
 	if (argc == 1) {
 		fprintf(stderr, "%s\n",
 		        "Usage: ./assignment8 <client/server> <address>");
@@ -33,7 +32,7 @@ int main(int argc, char **argv)
 			client(argv[2]);
 		} else {
 			fprintf(stderr, "%s\n",
-			        "Error: client must recieve server adress");
+			        "Error: client must receive server adress");
 			return 1;
 		}
 	}
@@ -43,8 +42,16 @@ int main(int argc, char **argv)
 void server() {
 	int listenfd = socket(AF_INET, SOCK_STREAM, 0);
 
-	setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
-	           sizeof(int));
+	if (listenfd == -1) {
+		perror("Error: ");
+		exit(errno);
+	}
+
+	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
+	    sizeof(int))) {
+		perror("Error: ");
+		exit(errno);
+	}
 
 	struct sockaddr_in serv_addr;
 	memset(&serv_addr, 0, sizeof(serv_addr));
@@ -58,17 +65,30 @@ void server() {
 		exit(errno);
 	}
 
-	listen(listenfd, BACK_LOG);
+	if (listen(listenfd, BACK_LOG)) {
+		perror("Error: ");
+		exit(errno);
+	}
 
 	int clientfd;
 	struct sockaddr_in client_addr;
 	int length = sizeof(client_addr);
+
+	int total_connections = 0;
 
 	while (1) {
 		while (waitpid(-1, NULL, WNOHANG) > 0);
 
 		clientfd = accept(listenfd, (struct sockaddr *) &client_addr,
 		                  (socklen_t *) &length);
+
+		if (clientfd == -1) {
+			perror("Error: ");
+			exit(errno);
+		}
+
+		total_connections++;
+
 		if (fork()) {
 			close(clientfd);
 			continue;
@@ -76,23 +96,37 @@ void server() {
 
 		char client_name[NI_MAXHOST];
 		int client_entry;
-		client_entry = getnameinfo((struct sockaddr*) &client_addr,
-		                        sizeof(client_addr),
-		                        client_name,
-		                        sizeof(client_name),
-		                        NULL,
-		                        0,
-		                        NI_NUMERICSERV); // idk what flag to set here
-		if(client_entry)
-			fprintf(stderr, "Error: %s\n", 
+		client_entry = getnameinfo((struct sockaddr *) &client_addr,
+		                           sizeof(client_addr),
+		                           client_name,
+		                           sizeof(client_name),
+		                           NULL,
+		                           0,
+		                           NI_NUMERICSERV);
+		if (client_entry)
+			fprintf(stderr, "Error: %s\n",
 			        gai_strerror(client_entry));
 		else
-			printf("%s\n", client_name);
+			printf("%s %d\n", client_name, total_connections);
+
+		const time_t seconds = time(NULL);
+		char date[26] = {0};
+
+		if (ctime_r(&seconds, date) == NULL) {
+			perror("Error: ");
+			exit(errno);
+		}
+
+		date[18] = '\0';
+		if (write(clientfd, date, 18) == -1) {
+			perror("Error: ");
+			exit(errno);
+		}
 		exit(client_entry);
 	}
 }
 
-void client(char *address) {
+void client(const char *address) {
 	int status;
 	struct addrinfo hints;
 	struct addrinfo *res;
@@ -105,16 +139,31 @@ void client(char *address) {
 
 	sprintf(port, "%d", SERVER_PORT);
 
-	// NOTE: error check later
 	status = getaddrinfo(address, port, &hints, &res);
 
-	int sockfd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+	if (status) {
+		fprintf(stderr, "Error: %s\n", gai_strerror(status));
+		exit(status);
+	}
 
-	// NOTE: loop and connect to first address that succeeds (later)
-	// NOTE: also error check later
-	if(connect(sockfd, res->ai_addr,
-	           sizeof(res->ai_addr)) == 0) {
+	int sockfd = socket(res->ai_family, res->ai_socktype,
+	                    res->ai_protocol);
+
+	if (sockfd == -1) {
 		perror("Error: ");
 		exit(errno);
 	}
+
+	if (connect(sockfd, res->ai_addr, res->ai_addrlen)) {
+		perror("Error: ");
+		exit(errno);
+	}
+
+	char date[18] = {0};
+
+	if (read(sockfd, date, 18) == -1) {
+		perror("Error: ");
+		exit(errno);
+	}
+	printf("%s\n", date);
 }
