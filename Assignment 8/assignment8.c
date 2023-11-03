@@ -172,9 +172,6 @@ void server() {
 			exit(errno);
 		}
 
-		// we only care about the first 18 bytes
-		date[18] = '\0';
-
 		// send 18 bytes of date info to client
 		if (write(clientfd, date, 18) == -1) {
 			perror("Error: ");
@@ -227,7 +224,8 @@ void client(const char *address) {
 		exit(errno);
 	}
 
-	char date[18] = {0};
+	// 19 bytes to include the null terminator
+	char date[19] = {0};
 
 	// read the date from the server
 	if (read(sockfd, date, 18) == -1) {
