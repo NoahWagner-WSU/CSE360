@@ -1,7 +1,8 @@
 #include "myftp.h"
 
-void client(const char *address);
+int ctrl_conn(const char *address);
 
+// loops until a valid command is read from stdin, then returns it
 // char *get_command();
 
 int main(int argc, char **argv)
@@ -12,13 +13,30 @@ int main(int argc, char **argv)
 		return 1;
 	}
 	
-	client(argv[1]);
+	int ctrl_sock = ctrl_conn(argv[1]);
+
+	// start command loop here
+	char buffer[MAX_COMMAND_LENGTH] = {0};
+	int actual = 0;
+
+	printf("MYFTP> ");
+	fflush(stdout);
+	while((actual = read(1, buffer, MAX_COMMAND_LENGTH)) > 0) {
+		printf("%s", buffer);
+		printf("MYFTP> ");
+	}
+
+	if(actual < 0) {
+		// error check read() here
+	}
+
+	// get_command(stdin)
 	
 	return 0;
 }
 
 // NOTE: this function is taken from my assignment 8 source code
-void client(const char *address)
+int ctrl_conn(const char *address)
 {
 	int status;
 	struct addrinfo hints;
@@ -59,17 +77,7 @@ void client(const char *address)
 		exit(errno);
 	}
 
-	// 19 bytes to include the null terminator
-	char date[19] = {0};
+	printf("Connected to server %s\n", address);
 
-	// read the date from the server
-	if (read(sockfd, date, 18) == -1) {
-		perror("Error: ");
-		close(sockfd);
-		exit(errno);
-	}
-
-	// print the date
-	printf("%s\n", date);
-	close(sockfd);
+	return sockfd;
 }

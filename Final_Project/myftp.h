@@ -10,5 +10,7 @@
 #include <errno.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <limits.h>
 
 #define SERVER_PORT 49999
+#define MAX_COMMAND_LENGTH (PATH_MAX + 5)

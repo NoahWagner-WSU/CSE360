@@ -1,16 +1,24 @@
 #include "myftp.h"
 #define BACK_LOG 4
 
-void server();
+int init();
+int ctrl_conn_loop(int listenfd);
 
 int main(int argc, char **argv)
 {
-	server();
+	int listenfd = init();
+	int clientfd = ctrl_conn_loop(listenfd);
+
+	// we are now in the child process
+
+	// start listening for control connections
+	// read_command(clientfd)
+
 	return 0;
 }
 
 // NOTE: this function is taken from my assignment 8 source code
-void server() 
+int init() 
 {
 	int listenfd = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -46,12 +54,15 @@ void server()
 		perror("Error: ");
 		exit(errno);
 	}
+	return listenfd;
+}
 
+// NOTE: this function is taken from my assignment 8 source code
+int ctrl_conn_loop(int listenfd)
+{
 	int clientfd;
 	struct sockaddr_in client_addr;
 	int length = sizeof(client_addr);
-
-	int total_connections = 0;
 
 	// set up daemon behavior
 	while (1) {
@@ -66,8 +77,6 @@ void server()
 			perror("Error: ");
 			exit(errno);
 		}
-
-		total_connections++;
 
 		if (fork()) {
 			// parent doesn't need this
@@ -93,28 +102,10 @@ void server()
 			close(clientfd);
 			exit(client_entry);
 		} else {
-			printf("%s %d\n", client_name, total_connections);
+			printf("Child %d: Connection accepted from host %s\n", 
+			       getpid(), client_name);
 		}
 
-		// get current time in seconds
-		const time_t seconds = time(NULL);
-		char date[26] = {0};
-
-		// convert seconds to string date
-		if (ctime_r(&seconds, date) == NULL) {
-			perror("Error: ");
-			close(clientfd);
-			exit(errno);
-		}
-
-		// send 18 bytes of date info to client
-		if (write(clientfd, date, 18) == -1) {
-			perror("Error: ");
-			close(clientfd);
-			exit(errno);
-		}
-
-		close(clientfd);
-		exit(0);
+		return clientfd;
 	}
 }
