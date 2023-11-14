@@ -21,7 +21,7 @@ int main(int argc, char **argv)
 
 	printf("MYFTP> ");
 	fflush(stdout);
-	while((actual = read(1, buffer, MAX_COMMAND_LENGTH)) > 0) {
+	while((actual = read(0, buffer, MAX_COMMAND_LENGTH)) > 0) {
 		printf("%s", buffer);
 		printf("MYFTP> ");
 	}
