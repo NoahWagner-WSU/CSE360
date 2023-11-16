@@ -13,4 +13,6 @@
 #include <limits.h>
 
 #define SERVER_PORT 49999
+
+// add 5 because largest command prefix is 5 characters
 #define MAX_COMMAND_LENGTH (PATH_MAX + 5)

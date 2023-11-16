@@ -11,13 +11,26 @@ int main(int argc, char **argv)
 
 	// we are now in the child process
 
+	char buffer[MAX_COMMAND_LENGTH] = {0};
+	int actual;
+	while((actual = read(clientfd, buffer, MAX_COMMAND_LENGTH)) > 0) {
+		char response = 0;
+		if(!strcmp(buffer, "Q\n")) {
+			response = 'A';
+			write(clientfd, &response, 1);
+			close(clientfd);
+			printf("Child %d exiting...\n", getpid());
+			exit(0);
+		}
+	}
+
 	// start listening for control connections
 	// read_command(clientfd)
 
 	return 0;
 }
 
-// NOTE: this function is taken from my assignment 8 source code
+// NOTE: the source of this function is taken from my assignment 8 source code
 int init() 
 {
 	int listenfd = socket(AF_INET, SOCK_STREAM, 0);

@@ -2,8 +2,16 @@
 
 int ctrl_conn(const char *address);
 
-// loops until a valid command is read from stdin, then returns it
 // char *get_command();
+
+void handle_exit(int ctrl_sock);
+void handle_cd(char *path);
+void handle_rcd(int ctrl_sock, char *path);
+void handle_ls();
+void handle_rls(int ctrl_sock);
+void handle_get(int ctrl_sock, char *path);
+void handle_show(int ctrl_sock, char *path);
+void handle_put(int ctrl_sock, char *path);
 
 int main(int argc, char **argv)
 {
@@ -12,7 +20,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "%s\n", "Error: No server adress specified");
 		return 1;
 	}
-	
+
 	int ctrl_sock = ctrl_conn(argv[1]);
 
 	// start command loop here
@@ -21,17 +29,54 @@ int main(int argc, char **argv)
 
 	printf("MYFTP> ");
 	fflush(stdout);
-	while((actual = read(0, buffer, MAX_COMMAND_LENGTH)) > 0) {
-		printf("%s", buffer);
+	while ((actual = read(0, buffer, MAX_COMMAND_LENGTH)) > 0) {
+		// remove /n at end of buffer
+		int i = 0;
+		while(buffer[i] != '\n')
+			i++;
+		buffer[i] = '\0';
+
+		char *cmd = strtok(buffer, " ");
+		char *path = strtok(NULL, " ");
+
+		if (!strcmp(cmd, "exit")) {
+			// printf("handle_exit()\n");
+			handle_exit(ctrl_sock);
+		} else if (!strcmp(cmd, "cd")) {
+			printf("handle_cd()\n");
+			// handle_cd(path);
+		} else if (!strcmp(cmd, "rcd")) {
+			printf("handle_rcd()\n");
+			// handle_rcd(ctrl_sock, path);
+		} else if (!strcmp(cmd, "ls")) {
+			printf("handle_ls()\n");
+			// handle_ls();
+		} else if (!strcmp(cmd, "rls")) {
+			printf("handle_rls()\n");
+			// handle_rls(ctrl_sock);
+		} else if (!strcmp(cmd, "get")) {
+			printf("handle_get()\n");
+			// handle_get(ctrl_sock, path);
+		} else if (!strcmp(cmd, "show")) {
+			printf("handle_show()\n");
+			// handle_show(ctrl_sock, path);
+		} else if (!strcmp(cmd, "put")) {
+			printf("handle_put()\n");
+			// handle_put(ctrl_sock, path);
+		} else {
+			printf("Command '%s' is unknown - ignored\n", cmd);
+		}
+			
 		printf("MYFTP> ");
+		fflush(stdout);
+		memset(buffer, 0, MAX_COMMAND_LENGTH);
 	}
 
-	if(actual < 0) {
+	if (actual < 0) {
 		// error check read() here
+		// i don't think this is a fatal error, consider kep trying to read
 	}
 
-	// get_command(stdin)
-	
 	return 0;
 }
 
@@ -59,7 +104,7 @@ int ctrl_conn(const char *address)
 	}
 
 	/*
-	create the socket with the same family, socktype, and protocal as the 
+	create the socket with the same family, socktype, and protocal as the
 	first result from getaddrinfo
 	*/
 	int sockfd = socket(res->ai_family, res->ai_socktype,
@@ -80,4 +125,20 @@ int ctrl_conn(const char *address)
 	printf("Connected to server %s\n", address);
 
 	return sockfd;
+}
+
+void handle_exit(int ctrl_sock) {
+	// length is arbitrary for now, this is done to account for if the server responds with E
+	char response[512] = {0}; 
+	char status = 0;
+	write(ctrl_sock, "Q\n", 2);
+	read(ctrl_sock, &status, 1);
+	if(status == 'E') {
+		printf("ERROR OCCURED\n");
+		// while(actual = read(ctrl_sock, response, 512) > 0) {
+		// 	// print error 512 bytes at a time
+		// }
+	}
+	close(ctrl_sock);
+	exit(0);
 }
