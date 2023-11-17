@@ -14,5 +14,7 @@
 
 #define SERVER_PORT 49999
 
-// add 5 because largest command prefix is 5 characters
+#define READ_BUFFER_SIZE 1024
+
+// add 5 because largest command prefix is 5 characters (REMOVE)
 #define MAX_COMMAND_LENGTH (PATH_MAX + 5)

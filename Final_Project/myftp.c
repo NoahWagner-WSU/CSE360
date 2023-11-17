@@ -2,7 +2,6 @@
 
 int ctrl_conn(const char *address);
 
-// char *get_command();
 
 void handle_exit(int ctrl_sock);
 void handle_cd(char *path);
@@ -12,6 +11,14 @@ void handle_rls(int ctrl_sock);
 void handle_get(int ctrl_sock, char *path);
 void handle_show(int ctrl_sock, char *path);
 void handle_put(int ctrl_sock, char *path);
+
+// reads from a file descriptor until a "\n" or EOF is reached or number of bytes read is == size
+// fd should only contain at most 1 line while the function executes
+// returns length of line on success, -1 on error
+int get_line(int fd, char *result, int size);
+
+// return 0 or port num if recieved A, return -1 on E, print error message
+int handle_response(int ctrl_sock);
 
 int main(int argc, char **argv)
 {
@@ -29,15 +36,16 @@ int main(int argc, char **argv)
 
 	printf("MYFTP> ");
 	fflush(stdout);
-	while ((actual = read(0, buffer, MAX_COMMAND_LENGTH)) > 0) {
-		// remove /n at end of buffer
-		int i = 0;
-		while(buffer[i] != '\n')
-			i++;
-		buffer[i] = '\0';
-
+	while ((actual = get_line(0, buffer, MAX_COMMAND_LENGTH)) > 0) {
 		char *cmd = strtok(buffer, " ");
 		char *path = strtok(NULL, " ");
+
+		if (cmd == NULL) {
+			printf("MYFTP> ");
+			fflush(stdout);
+			memset(buffer, 0, MAX_COMMAND_LENGTH);
+			continue;
+		}
 
 		if (!strcmp(cmd, "exit")) {
 			// printf("handle_exit()\n");
@@ -66,7 +74,7 @@ int main(int argc, char **argv)
 		} else {
 			printf("Command '%s' is unknown - ignored\n", cmd);
 		}
-			
+
 		printf("MYFTP> ");
 		fflush(stdout);
 		memset(buffer, 0, MAX_COMMAND_LENGTH);
@@ -78,6 +86,35 @@ int main(int argc, char **argv)
 	}
 
 	return 0;
+}
+
+// still haven't checked edge cases, debug more later
+int get_line(int fd, char *result, int size) {
+	char buffer[READ_BUFFER_SIZE] = { 0 };
+	int actual = 0;
+	int offset = 0;
+	while ((actual = read(fd, buffer, READ_BUFFER_SIZE)) > 0 && offset < size) {
+		if ((offset + actual) >= size)
+			actual = size - offset;
+
+		memcpy(result + offset, buffer, actual);
+		offset += actual;
+
+		int i = 0;
+		while (result[i] != '\n' && i < offset)
+			i++;
+		if (i < offset) {
+			result[i] = '\0';
+			break;
+		}
+		memset(buffer, 0, READ_BUFFER_SIZE);
+	}
+
+	if (actual < 0) {
+		return -1;
+	}
+
+	return offset;
 }
 
 // NOTE: this function is taken from my assignment 8 source code
@@ -129,11 +166,12 @@ int ctrl_conn(const char *address)
 
 void handle_exit(int ctrl_sock) {
 	// length is arbitrary for now, this is done to account for if the server responds with E
-	char response[512] = {0}; 
+	char response[512] = {0};
 	char status = 0;
 	write(ctrl_sock, "Q\n", 2);
+	// call handle_response here
 	read(ctrl_sock, &status, 1);
-	if(status == 'E') {
+	if (status == 'E') {
 		printf("ERROR OCCURED\n");
 		// while(actual = read(ctrl_sock, response, 512) > 0) {
 		// 	// print error 512 bytes at a time
