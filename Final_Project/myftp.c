@@ -12,13 +12,15 @@ void handle_get(int ctrl_sock, char *path);
 void handle_show(int ctrl_sock, char *path);
 void handle_put(int ctrl_sock, char *path);
 
-// reads from a file descriptor until a "\n" or EOF is reached or number of bytes read is == size
-// fd should only contain at most 1 line while the function executes
-// returns length of line on success, -1 on error
-int get_line(int fd, char *result, int size);
+void handle_command(int ctrl_sock, char *cmd, char *path);
 
-// return 0 or port num if recieved A, return -1 on E, print error message
-int handle_response(int ctrl_sock);
+// reads from a file descriptor until a "\n" or EOF is reached
+// fd should only contain at most 1 line while the function executes
+// returns the line on success, NULL on error
+char *get_line(int fd);
+
+// return port num in string form (or empty string) if recieved A, return -1 on E, print error message
+char *handle_response(int ctrl_sock);
 
 int main(int argc, char **argv)
 {
@@ -31,79 +33,84 @@ int main(int argc, char **argv)
 	int ctrl_sock = ctrl_conn(argv[1]);
 
 	// start command loop here
-	char buffer[MAX_COMMAND_LENGTH] = {0};
-	int actual = 0;
+	char *line;
 
-	printf("MYFTP> ");
+	printf("MYFTP> ");	
 	fflush(stdout);
-	while ((actual = get_line(0, buffer, MAX_COMMAND_LENGTH)) > 0) {
-		char *cmd = strtok(buffer, " ");
+
+	while ((line = get_line(0)) != NULL) {
+		char *cmd = strtok(line, " ");
 		char *path = strtok(NULL, " ");
 
-		if (cmd == NULL) {
-			printf("MYFTP> ");
-			fflush(stdout);
-			memset(buffer, 0, MAX_COMMAND_LENGTH);
-			continue;
-		}
+		if (cmd != NULL)
+			handle_command(ctrl_sock, cmd, path);
 
-		if (!strcmp(cmd, "exit")) {
-			// printf("handle_exit()\n");
-			handle_exit(ctrl_sock);
-		} else if (!strcmp(cmd, "cd")) {
-			printf("handle_cd()\n");
-			// handle_cd(path);
-		} else if (!strcmp(cmd, "rcd")) {
-			printf("handle_rcd()\n");
-			// handle_rcd(ctrl_sock, path);
-		} else if (!strcmp(cmd, "ls")) {
-			printf("handle_ls()\n");
-			// handle_ls();
-		} else if (!strcmp(cmd, "rls")) {
-			printf("handle_rls()\n");
-			// handle_rls(ctrl_sock);
-		} else if (!strcmp(cmd, "get")) {
-			printf("handle_get()\n");
-			// handle_get(ctrl_sock, path);
-		} else if (!strcmp(cmd, "show")) {
-			printf("handle_show()\n");
-			// handle_show(ctrl_sock, path);
-		} else if (!strcmp(cmd, "put")) {
-			printf("handle_put()\n");
-			// handle_put(ctrl_sock, path);
-		} else {
-			printf("Command '%s' is unknown - ignored\n", cmd);
-		}
-
+		free(line);
 		printf("MYFTP> ");
 		fflush(stdout);
-		memset(buffer, 0, MAX_COMMAND_LENGTH);
 	}
 
-	if (actual < 0) {
-		// error check read() here
-		// i don't think this is a fatal error, consider kep trying to read
-	}
-
-	return 0;
+	// get_line failed, meaning read() failed
+	// i don't think this is a fatal error, consider kep trying to read
+	fprintf(stderr, "%s\n", strerror(errno));
+	return errno;
 }
 
-// still haven't checked edge cases, debug more later
-int get_line(int fd, char *result, int size) {
-	char buffer[READ_BUFFER_SIZE] = { 0 };
-	int actual = 0;
-	int offset = 0;
-	while ((actual = read(fd, buffer, READ_BUFFER_SIZE)) > 0 && offset < size) {
-		if ((offset + actual) >= size)
-			actual = size - offset;
+void handle_command(int ctrl_sock, char *cmd, char *path) {
+	if (!strcmp(cmd, "exit")) {
+		// printf("handle_exit()\n");
+		handle_exit(ctrl_sock);
+	} else if (!strcmp(cmd, "cd")) {
+		printf("handle_cd()\n");
+		// handle_cd(path);
+	} else if (!strcmp(cmd, "rcd")) {
+		printf("handle_rcd()\n");
+		// handle_rcd(ctrl_sock, path);
+	} else if (!strcmp(cmd, "ls")) {
+		printf("handle_ls()\n");
+		// handle_ls();
+	} else if (!strcmp(cmd, "rls")) {
+		printf("handle_rls()\n");
+		// handle_rls(ctrl_sock);
+	} else if (!strcmp(cmd, "get")) {
+		printf("handle_get()\n");
+		// handle_get(ctrl_sock, path);
+	} else if (!strcmp(cmd, "show")) {
+		printf("handle_show()\n");
+		// handle_show(ctrl_sock, path);
+	} else if (!strcmp(cmd, "put")) {
+		printf("handle_put()\n");
+		// handle_put(ctrl_sock, path);
+	} else {
+		printf("Command '%s' is unknown - ignored\n", cmd);
+	}
+}
 
-		memcpy(result + offset, buffer, actual);
-		offset += actual;
+// function might not be full proof
+char *get_line(int fd) {
+	char *result = NULL;
+	int result_size = 0;
+
+	char buffer[READ_BUFFER_SIZE] = {0};
+	int actual = 0;
+
+	while ((actual = read(fd, buffer, READ_BUFFER_SIZE)) > 0) {
+		
+		char *tmp = calloc(result_size + actual, 1);
+
+		if(result) {
+			memcpy(tmp, result, result_size);
+			free(result);
+		}
+		memcpy(tmp + result_size, buffer, actual);
+
+		result = tmp;
+		result_size += actual;
 
 		int i = 0;
-		while (result[i] != '\n' && i < offset)
+		while (result[i] != '\n' && i < result_size)
 			i++;
-		if (i < offset) {
+		if (i < result_size) {
 			result[i] = '\0';
 			break;
 		}
@@ -111,10 +118,12 @@ int get_line(int fd, char *result, int size) {
 	}
 
 	if (actual < 0) {
-		return -1;
+		if(result)
+			free(result);
+		return NULL;
 	}
 
-	return offset;
+	return result;
 }
 
 // NOTE: this function is taken from my assignment 8 source code
@@ -148,13 +157,13 @@ int ctrl_conn(const char *address)
 	                    res->ai_protocol);
 
 	if (sockfd == -1) {
-		perror("Error: ");
+		perror("Error");
 		exit(errno);
 	}
 
 	// try connecting to the first address returned by getaddrinfo
 	if (connect(sockfd, res->ai_addr, res->ai_addrlen)) {
-		perror("Error: ");
+		perror("Error");
 		close(sockfd);
 		exit(errno);
 	}
@@ -164,19 +173,24 @@ int ctrl_conn(const char *address)
 	return sockfd;
 }
 
-void handle_exit(int ctrl_sock) {
-	// length is arbitrary for now, this is done to account for if the server responds with E
-	char response[512] = {0};
-	char status = 0;
-	write(ctrl_sock, "Q\n", 2);
-	// call handle_response here
-	read(ctrl_sock, &status, 1);
-	if (status == 'E') {
-		printf("ERROR OCCURED\n");
-		// while(actual = read(ctrl_sock, response, 512) > 0) {
-		// 	// print error 512 bytes at a time
-		// }
+char *handle_response(int ctrl_sock) {
+	char type;
+	read(ctrl_sock, &type, 1);
+	if(type == 'E') {
+		char *error = get_line(ctrl_sock);
+		fprintf(stderr, "Server Error: %s\n", error);
+		free(error);
+		return NULL;
 	}
+
+	return get_line(ctrl_sock);
+}
+	
+void handle_exit(int ctrl_sock) {
+	// NOTE: error check this later
+	write(ctrl_sock, "Q\n", 2);
+	char *response = handle_response(ctrl_sock);
+	free(response);
 	close(ctrl_sock);
 	exit(0);
 }
