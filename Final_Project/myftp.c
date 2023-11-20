@@ -56,7 +56,8 @@ int main(int argc, char **argv)
 	return errno;
 }
 
-void handle_command(int ctrl_sock, char *cmd, char *path) {
+void handle_command(int ctrl_sock, char *cmd, char *path) 
+{
 	if (!strcmp(cmd, "exit")) {
 		// printf("handle_exit()\n");
 		handle_exit(ctrl_sock);
@@ -87,7 +88,8 @@ void handle_command(int ctrl_sock, char *cmd, char *path) {
 }
 
 // function might not be full proof
-char *get_line(int fd) {
+char *get_line(int fd) 
+{
 	char *result = NULL;
 	int result_size = 0;
 
@@ -95,7 +97,7 @@ char *get_line(int fd) {
 	int actual = 0;
 
 	while ((actual = read(fd, buffer, READ_BUFFER_SIZE)) > 0) {
-		
+
 		char *tmp = calloc(result_size + actual, 1);
 
 		if(result) {
@@ -173,7 +175,8 @@ int ctrl_conn(const char *address)
 	return sockfd;
 }
 
-char *handle_response(int ctrl_sock) {
+char *handle_response(int ctrl_sock) 
+{
 	char type;
 	read(ctrl_sock, &type, 1);
 	if(type == 'E') {
@@ -186,7 +189,8 @@ char *handle_response(int ctrl_sock) {
 	return get_line(ctrl_sock);
 }
 	
-void handle_exit(int ctrl_sock) {
+void handle_exit(int ctrl_sock) 
+{
 	// NOTE: error check this later
 	write(ctrl_sock, "Q\n", 2);
 	char *response = handle_response(ctrl_sock);
