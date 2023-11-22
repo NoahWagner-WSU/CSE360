@@ -4,6 +4,8 @@
 int init();
 int ctrl_conn_loop(int listenfd);
 
+char *get_line(int fd);
+
 int main(int argc, char **argv)
 {
 	int listenfd = init();
@@ -11,15 +13,16 @@ int main(int argc, char **argv)
 
 	// we are now in the child process
 
-	char buffer[MAX_COMMAND_LENGTH] = {0};
-	int actual;
-	while((actual = read(clientfd, buffer, MAX_COMMAND_LENGTH)) > 0) {
+	char *line;
+	while((line = get_line(clientfd)) != NULL) {
 		char response = 0;
-		if(!strcmp(buffer, "Q\n")) {
+		if(!strcmp(line, "Q\0")) {
 			response = 'A';
-			write(clientfd, &response, 1);
+			char message[2] = {response, '\n'};
+			write(clientfd, message, 2);
 			close(clientfd);
-			printf("Child %d exiting...\n", getpid());
+			printf("Child %d: Quitting\n", getpid());
+			free(line);
 			exit(0);
 		}
 	}
@@ -121,4 +124,45 @@ int ctrl_conn_loop(int listenfd)
 
 		return clientfd;
 	}
+}
+
+// function might not be full proof
+char *get_line(int fd)
+{
+	char *result = NULL;
+	int result_size = 0;
+
+	char buffer[READ_BUFFER_SIZE] = {0};
+	int actual = 0;
+
+	while ((actual = read(fd, buffer, READ_BUFFER_SIZE)) > 0) {
+
+		char *tmp = calloc(result_size + actual, 1);
+
+		if (result) {
+			memcpy(tmp, result, result_size);
+			free(result);
+		}
+		memcpy(tmp + result_size, buffer, actual);
+
+		result = tmp;
+		result_size += actual;
+
+		int i = 0;
+		while (result[i] != '\n' && i < result_size)
+			i++;
+		if (i < result_size) {
+			result[i] = '\0';
+			break;
+		}
+		memset(buffer, 0, READ_BUFFER_SIZE);
+	}
+
+	if (actual < 0) {
+		if (result)
+			free(result);
+		return NULL;
+	}
+
+	return result;
 }

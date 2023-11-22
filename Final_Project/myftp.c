@@ -19,8 +19,16 @@ void handle_command(int ctrl_sock, char *cmd, char *path);
 // returns the line on success, NULL on error
 char *get_line(int fd);
 
-// return port num in string form (or empty string) if recieved A, return -1 on E, print error message
+// if E, prints error message and returns it
+// if A, returns string port or empty string
+// on error, prints error message and returns NULL
 char *handle_response(int ctrl_sock);
+
+// sends a server command, appends a "\n", returns 0 on success, errno on error
+int send_command(int ctrl_sock, char cmd, char *path);
+
+// sends a series of bytes to the server, 0 on success, errno on error
+int send_bytes(int ctrl_sock, char *bytes, int length);
 
 int main(int argc, char **argv)
 {
@@ -35,7 +43,7 @@ int main(int argc, char **argv)
 	// start command loop here
 	char *line;
 
-	printf("MYFTP> ");	
+	printf("MYFTP> ");
 	fflush(stdout);
 
 	while ((line = get_line(0)) != NULL) {
@@ -56,14 +64,14 @@ int main(int argc, char **argv)
 	return errno;
 }
 
-void handle_command(int ctrl_sock, char *cmd, char *path) 
+void handle_command(int ctrl_sock, char *cmd, char *path)
 {
 	if (!strcmp(cmd, "exit")) {
 		// printf("handle_exit()\n");
 		handle_exit(ctrl_sock);
 	} else if (!strcmp(cmd, "cd")) {
-		printf("handle_cd()\n");
-		// handle_cd(path);
+		// printf("handle_cd()\n");
+		handle_cd(path);
 	} else if (!strcmp(cmd, "rcd")) {
 		printf("handle_rcd()\n");
 		// handle_rcd(ctrl_sock, path);
@@ -88,7 +96,7 @@ void handle_command(int ctrl_sock, char *cmd, char *path)
 }
 
 // function might not be full proof
-char *get_line(int fd) 
+char *get_line(int fd)
 {
 	char *result = NULL;
 	int result_size = 0;
@@ -100,7 +108,7 @@ char *get_line(int fd)
 
 		char *tmp = calloc(result_size + actual, 1);
 
-		if(result) {
+		if (result) {
 			memcpy(tmp, result, result_size);
 			free(result);
 		}
@@ -120,7 +128,7 @@ char *get_line(int fd)
 	}
 
 	if (actual < 0) {
-		if(result)
+		if (result)
 			free(result);
 		return NULL;
 	}
@@ -175,26 +183,92 @@ int ctrl_conn(const char *address)
 	return sockfd;
 }
 
-char *handle_response(int ctrl_sock) 
+char *handle_response(int ctrl_sock)
 {
+	// NOTE: error check later
 	char type;
-	read(ctrl_sock, &type, 1);
-	if(type == 'E') {
-		char *error = get_line(ctrl_sock);
-		fprintf(stderr, "Server Error: %s\n", error);
-		free(error);
+	
+	int bytes_read = read(ctrl_sock, &type, 1);
+
+	if(bytes_read < 0) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
 		return NULL;
 	}
 
-	return get_line(ctrl_sock);
+	if(bytes_read == 0) {
+		fprintf(stderr, "Error: control socket closed unexpectedly\n");
+		return NULL;
+	}
+
+	char *message = get_line(ctrl_sock);
+
+	if(message == NULL) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		return NULL;
+	}
+
+	if (type == 'E')
+		fprintf(stderr, "Server Error: %s\n", message);
+
+	return message;
 }
-	
-void handle_exit(int ctrl_sock) 
+
+int send_command(int ctrl_sock, char cmd, char *path)
 {
-	// NOTE: error check this later
-	write(ctrl_sock, "Q\n", 2);
+	int result = send_bytes(ctrl_sock, &cmd, 1);
+
+	if (result)
+		return result;
+
+	if (path) {
+		result = send_bytes(ctrl_sock, path, PATH_MAX);
+		if(result)
+			return result;
+	}
+
+	char new_line = '\n';
+	result = send_bytes(ctrl_sock, &new_line, 1);
+
+	if (result)
+		return result;
+	return 0;
+}
+
+int send_bytes(int ctrl_sock, char *bytes, int length)
+{
+	int result = 0;
+	int actual = 0;
+	while (actual < length) {
+		result = write(ctrl_sock, bytes + actual, length - actual);
+		if (result < 0)
+			return errno;
+		actual += result;
+	}
+	return 0;
+}
+
+void handle_exit(int ctrl_sock)
+{
+	int error = send_command(ctrl_sock, 'Q', NULL);
+	if(error) {
+		fprintf(stderr, "Error: %s\n", strerror(error));
+		exit(0);
+	}
+
 	char *response = handle_response(ctrl_sock);
 	free(response);
-	close(ctrl_sock);
 	exit(0);
+}
+
+void handle_cd(char *path)
+{
+	if(!path) {
+		fprintf(stderr, "Command error: expecting a parameter.\n");
+		return;
+	}
+
+	if(chdir(path)) {
+		fprintf(stderr, "Change directory: %s\n", strerror(errno));
+		return;
+	}
 }
