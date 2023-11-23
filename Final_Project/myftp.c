@@ -76,8 +76,8 @@ void handle_command(int ctrl_sock, char *cmd, char *path)
 		printf("handle_rcd()\n");
 		// handle_rcd(ctrl_sock, path);
 	} else if (!strcmp(cmd, "ls")) {
-		printf("handle_ls()\n");
-		// handle_ls();
+		// printf("handle_ls()\n");
+		handle_ls();
 	} else if (!strcmp(cmd, "rls")) {
 		printf("handle_rls()\n");
 		// handle_rls(ctrl_sock);
@@ -187,22 +187,22 @@ char *handle_response(int ctrl_sock)
 {
 	// NOTE: error check later
 	char type;
-	
+
 	int bytes_read = read(ctrl_sock, &type, 1);
 
-	if(bytes_read < 0) {
+	if (bytes_read < 0) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
 		return NULL;
 	}
 
-	if(bytes_read == 0) {
+	if (bytes_read == 0) {
 		fprintf(stderr, "Error: control socket closed unexpectedly\n");
 		return NULL;
 	}
 
 	char *message = get_line(ctrl_sock);
 
-	if(message == NULL) {
+	if (message == NULL) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
 		return NULL;
 	}
@@ -222,7 +222,7 @@ int send_command(int ctrl_sock, char cmd, char *path)
 
 	if (path) {
 		result = send_bytes(ctrl_sock, path, PATH_MAX);
-		if(result)
+		if (result)
 			return result;
 	}
 
@@ -250,7 +250,7 @@ int send_bytes(int ctrl_sock, char *bytes, int length)
 void handle_exit(int ctrl_sock)
 {
 	int error = send_command(ctrl_sock, 'Q', NULL);
-	if(error) {
+	if (error) {
 		fprintf(stderr, "Error: %s\n", strerror(error));
 		exit(0);
 	}
@@ -262,13 +262,54 @@ void handle_exit(int ctrl_sock)
 
 void handle_cd(char *path)
 {
-	if(!path) {
+	if (!path) {
 		fprintf(stderr, "Command error: expecting a parameter.\n");
 		return;
 	}
 
-	if(chdir(path)) {
+	if (chdir(path)) {
 		fprintf(stderr, "Change directory: %s\n", strerror(errno));
 		return;
 	}
+}
+
+// NOTE: code taken from assignment 4
+void handle_ls()
+{
+	// NOTE: error check later
+	int fd[2];
+	int rdr, wtr;
+	pipe(fd);
+	rdr = fd[0];
+	wtr = fd[1];
+
+	int f1 = fork();
+
+	if (f1 > 0) {
+		close(rdr); close(wtr);
+		wait(NULL);
+		return;
+	} else if (f1 == -1) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		return;
+	}
+
+	int f2 = fork();
+
+	if (f2 > 0) {
+		close(wtr);
+		// replace stdin with rdr
+		close(0); dup(rdr); close(rdr);
+		execlp("more", "more", "-20", (char *) NULL);
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		exit(1);
+	} else if (f2 == 0) {
+		close(rdr);
+		// replace stdout with wtr
+		close(1); dup(wtr); close(wtr);
+		execlp("ls", "ls", "-l", (char *) NULL);
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		exit(1);
+	}
+	fprintf(stderr, "Error: %s\n", strerror(errno));
 }
