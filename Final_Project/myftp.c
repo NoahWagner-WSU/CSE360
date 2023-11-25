@@ -1,7 +1,16 @@
 #include "myftp.h"
 
-int ctrl_conn(const char *address);
+/*
+TODO:
+- Implement rls handler
+	- we first need to setup a establish_data_connection() func first
+- double check all error handling
+	- lots of functions currently aren't checked if they fail
+- Check with Prof if we need to free 100% mallocs
+	- if we are exiting (say for exit handler or fatal error), couldn't we just let OS do it?
+*/
 
+int ctrl_conn(const char *address);
 
 void handle_exit(int ctrl_sock);
 void handle_cd(char *path);
@@ -19,10 +28,11 @@ void handle_command(int ctrl_sock, char *cmd, char *path);
 // returns the line on success, NULL on error
 char *get_line(int fd);
 
-// if E, prints error message and returns it
-// if A, returns string port or empty string
-// on error, prints error message and returns NULL
-char *handle_response(int ctrl_sock);
+// fills type and message with response from server
+// type can be filled to be either 'E' or 'A'
+// message can be '\0' or <port number> on 'A', and an error message on 'E'
+// returns 0 on success, -1 if server unexpectidly closed, and errno if we failed to read
+int handle_response(int ctrl_sock, char *type, char **message);
 
 // sends a server command, appends a "\n", returns 0 on success, errno on error
 int send_command(int ctrl_sock, char cmd, char *path);
@@ -68,13 +78,14 @@ void handle_command(int ctrl_sock, char *cmd, char *path)
 {
 	if (!strcmp(cmd, "exit")) {
 		// printf("handle_exit()\n");
+		free(cmd);
 		handle_exit(ctrl_sock);
 	} else if (!strcmp(cmd, "cd")) {
 		// printf("handle_cd()\n");
 		handle_cd(path);
 	} else if (!strcmp(cmd, "rcd")) {
-		printf("handle_rcd()\n");
-		// handle_rcd(ctrl_sock, path);
+		// printf("handle_rcd()\n");
+		handle_rcd(ctrl_sock, path);
 	} else if (!strcmp(cmd, "ls")) {
 		// printf("handle_ls()\n");
 		handle_ls();
@@ -180,37 +191,30 @@ int ctrl_conn(const char *address)
 
 	printf("Connected to server %s\n", address);
 
+	freeaddrinfo(res);
+
 	return sockfd;
 }
 
-char *handle_response(int ctrl_sock)
+int handle_response(int ctrl_sock, char *type, char **message)
 {
 	// NOTE: error check later
-	char type;
-
-	int bytes_read = read(ctrl_sock, &type, 1);
+	int bytes_read = read(ctrl_sock, type, 1);
 
 	if (bytes_read < 0) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
-		return NULL;
+		return errno;
 	}
 
 	if (bytes_read == 0) {
 		fprintf(stderr, "Error: control socket closed unexpectedly\n");
-		return NULL;
+		return -1;
 	}
 
-	char *message = get_line(ctrl_sock);
+	if (message)
+		*message = get_line(ctrl_sock);
 
-	if (message == NULL) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
-		return NULL;
-	}
-
-	if (type == 'E')
-		fprintf(stderr, "Server Error: %s\n", message);
-
-	return message;
+	return 0;
 }
 
 int send_command(int ctrl_sock, char cmd, char *path)
@@ -221,7 +225,7 @@ int send_command(int ctrl_sock, char cmd, char *path)
 		return result;
 
 	if (path) {
-		result = send_bytes(ctrl_sock, path, PATH_MAX);
+		result = send_bytes(ctrl_sock, path, strlen(path));
 		if (result)
 			return result;
 	}
@@ -249,14 +253,21 @@ int send_bytes(int ctrl_sock, char *bytes, int length)
 
 void handle_exit(int ctrl_sock)
 {
+	// NOTE: error check later
 	int error = send_command(ctrl_sock, 'Q', NULL);
 	if (error) {
 		fprintf(stderr, "Error: %s\n", strerror(error));
 		exit(0);
 	}
 
-	char *response = handle_response(ctrl_sock);
-	free(response);
+	char type = 0;
+	char *message;
+	error = handle_response(ctrl_sock, &type, &message);
+
+	if (error == 0 && type == 'E') {
+		fprintf(stderr, "Server Error: %s\n", message);
+	}
+	free(message);
 	exit(0);
 }
 
@@ -271,6 +282,29 @@ void handle_cd(char *path)
 		fprintf(stderr, "Change directory: %s\n", strerror(errno));
 		return;
 	}
+}
+
+void handle_rcd(int ctrl_sock, char *path)
+{
+	if (!path) {
+		fprintf(stderr, "Command error: expecting a parameter.\n");
+		return;
+	}
+
+	int error = send_command(ctrl_sock, 'C', path);
+
+	if (error) {
+		fprintf(stderr, "Error: %s\n", strerror(error));
+	}
+
+	char type = 0;
+	char *message;
+	error = handle_response(ctrl_sock, &type, &message);
+
+	if (error == 0 && type == 'E')
+		fprintf(stderr, "Server Error: %s\n", message);
+
+	free(message);
 }
 
 // NOTE: code taken from assignment 4
