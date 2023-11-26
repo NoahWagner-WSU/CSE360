@@ -6,6 +6,7 @@ TODO:
 - Do a passthrough of error checking (double check all system call error handling)
 	-waitpid will need more error checking
 - Implement a data connection establisher type function
+- Ask Prof about error checking write() to client (how should we debug / respond, is it fatal?)
 */
 
 int init();
@@ -233,9 +234,16 @@ void handle_exit(int clientfd)
 
 void handle_rcd(int clientfd, char *path)
 {
+	int error = 0;
 	if (chdir(path)) {
-		respond(clientfd, 'E', strerror(errno));
+		error = respond(clientfd, 'E', strerror(errno));
+		if(error)
+			fprintf(stderr, "Error: %s\n", strerror(error));
 		return;
 	}
-	respond(clientfd, 'A', NULL);
+
+	error = respond(clientfd, 'A', NULL);
+
+	if(error)
+		fprintf(stderr, "Error: %s\n", strerror(error));
 }
