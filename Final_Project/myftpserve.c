@@ -6,7 +6,7 @@ TODO:
 - Do a passthrough of error checking (double check all system call error handling)
 	-waitpid will need more error checking
 - Implement a data connection establisher type function
-- Ask Prof about error checking write() to client (how should we debug / respond, is it fatal?)
+- Ask Prof about error checking respond() (if write() fails) to client (how should we debug / respond, is it fatal?)
 */
 
 int init();
