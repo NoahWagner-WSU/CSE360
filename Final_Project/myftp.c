@@ -10,7 +10,14 @@ TODO:
 	- if we are exiting (say for exit handler or fatal error), couldn't we just let OS do it?
 */
 
-int ctrl_conn(const char *address);
+// NOTE: code from setup_ctrl_conn, get_server_addr, and connect_to_server is taken from assignment 8
+int setup_ctrl_conn(const char *address);
+int setup_data_conn(const char *address, const char *port);
+
+int get_server_addr(const char *address, const char *port,
+                    struct addrinfo **resinfo);
+
+int connect_to_server(struct addrinfo *info, int *sockfd);
 
 void handle_exit(int ctrl_sock);
 void handle_cd(char *path);
@@ -48,7 +55,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	int ctrl_sock = ctrl_conn(argv[1]);
+	int ctrl_sock = setup_ctrl_conn(argv[1]);
 
 	// start command loop here
 	char *line;
@@ -147,51 +154,76 @@ char *get_line(int fd)
 	return result;
 }
 
-// NOTE: this function is taken from my assignment 8 source code
-int ctrl_conn(const char *address)
+int get_server_addr(const char *address, const char *port,
+                    struct addrinfo **info)
 {
 	int status;
 	struct addrinfo hints;
-	struct addrinfo *res;
 
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 
+	// get the address info of the server
+	if ((status = getaddrinfo(address, port, &hints, info)))
+		fprintf(stderr, "Error: %s\n", gai_strerror(status));
+
+	return status;
+}
+
+int connect_to_server(struct addrinfo *info, int *sockfd)
+{
+	*sockfd = socket(info->ai_family, info->ai_socktype,
+	                 info->ai_protocol);
+
+	if (*sockfd == -1)
+		return errno;
+
+	// try connecting to the first address returned by getaddrinfo
+	if (connect(*sockfd, info->ai_addr, info->ai_addrlen)) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		return errno;
+	}
+
+	return 0;
+}
+
+int setup_ctrl_conn(const char *address)
+{
 	// stringify the port number
 	char port[NI_MAXSERV] = {0};
 	sprintf(port, "%d", SERVER_PORT);
 
-	// get the address info of the server
-	status = getaddrinfo(address, port, &hints, &res);
+	struct addrinfo *info;
+	int error = get_server_addr(address, port, &info);
 
-	if (status) {
-		fprintf(stderr, "Error: %s\n", gai_strerror(status));
-		exit(status);
-	}
+	if (error)
+		exit(error);
 
-	/*
-	create the socket with the same family, socktype, and protocal as the
-	first result from getaddrinfo
-	*/
-	int sockfd = socket(res->ai_family, res->ai_socktype,
-	                    res->ai_protocol);
+	int sockfd;
+	error = connect_to_server(info, &sockfd);
 
-	if (sockfd == -1) {
-		perror("Error");
-		exit(errno);
-	}
-
-	// try connecting to the first address returned by getaddrinfo
-	if (connect(sockfd, res->ai_addr, res->ai_addrlen)) {
-		perror("Error");
-		close(sockfd);
-		exit(errno);
-	}
+	if (error)
+		exit(error);
 
 	printf("Connected to server %s\n", address);
 
-	freeaddrinfo(res);
+	freeaddrinfo(info);
+
+	return sockfd;
+}
+
+int setup_data_conn(const char *address, const char *port)
+{
+	struct addrinfo *info;
+	if (get_server_addr(address, port, &info))
+		return -1;
+
+	int sockfd;
+	if (connect_to_server(info, &sockfd))
+		return -1;
+
+	freeaddrinfo(info);
 
 	return sockfd;
 }
@@ -213,6 +245,19 @@ int handle_response(int ctrl_sock, char *type, char **message)
 
 	if (message)
 		*message = get_line(ctrl_sock);
+
+	if (*message == NULL) {
+		fprintf(stderr, "Error: Failed to retrieve server response\n");
+		return -1;
+	}
+
+	if (*type == 'E') {
+		fprintf(stderr, "Server Error: %s\n", *message);
+	} else if (*type != 'A') {
+		fprintf(stderr,
+		        "Error: Unrecognized server response type %c\n", *type);
+		return -1;
+	}
 
 	return 0;
 }
@@ -263,11 +308,8 @@ void handle_exit(int ctrl_sock)
 	char type = 0;
 	char *message;
 	error = handle_response(ctrl_sock, &type, &message);
-
-	if (error == 0 && type == 'E') {
-		fprintf(stderr, "Server Error: %s\n", message);
-	}
-	free(message);
+	if(message)
+		free(message);
 	exit(0);
 }
 
@@ -300,11 +342,8 @@ void handle_rcd(int ctrl_sock, char *path)
 	char type = 0;
 	char *message;
 	error = handle_response(ctrl_sock, &type, &message);
-
-	if (error == 0 && type == 'E')
-		fprintf(stderr, "Server Error: %s\n", message);
-
-	free(message);
+	if(message)
+		free(message);
 }
 
 // NOTE: code taken from assignment 4
