@@ -3,8 +3,6 @@
 
 /*
 TODO:
-- Implement respond, handle_exit, and handle_rcd functions
-	- use send_bytes function instead of write (slightly more robust)
 - Do a passthrough of error checking (double check all system call error handling)
 	-waitpid will need more error checking
 - Implement a data connection establisher type function
@@ -13,14 +11,17 @@ TODO:
 int init();
 int ctrl_conn_loop(int listenfd);
 
+int send_bytes(int clientfd, char *bytes, int length);
+
 // sends a response back to the client
 // type is either 'A' or 'E'
 // message is either NULL, a port num, or an error message
+	// message must have a null terminator
 // returns 0 on success, -1 on error
 int respond(int clientfd, char type, char *message);
 
-int handle_exit(int clientfd);
-int handle_rcd(int clientfd, char *path);
+void handle_exit(int clientfd);
+void handle_rcd(int clientfd, char *path);
 
 char *get_line(int fd);
 
@@ -37,7 +38,7 @@ int main(int argc, char **argv)
 			free(line);
 			handle_exit(clientfd);
 		} else if (line[0] == 'C') {
-			handle_rcd(clientfd, line[1]);
+			handle_rcd(clientfd, line + 1);
 		}
 		free(line);
 	}
@@ -59,8 +60,8 @@ int init()
 	}
 
 	// remove port already in use error by setting socket options
-	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
-sizeof(int))) {
+	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1}, 
+	    sizeof(int))) {
 		perror("Error: ");
 		exit(errno);
 	}
@@ -182,17 +183,59 @@ char *get_line(int fd)
 	return result;
 }
 
-int handle_exit(int clientfd)
+int send_bytes(int clientfd, char *bytes, int length)
 {
-	char message[2] = {'A', '\n'};
-	// respond(clientfd, 'A', NULL); // use send_bytes in this function
-	write(clientfd, message, 2);
+	int result = 0;
+	int actual = 0;
+	while (actual < length) {
+		result = write(clientfd, bytes + actual, length - actual);
+		if (result < 0)
+			return errno;
+		actual += result;
+	}
+	return 0;
+}
+
+int respond(int clientfd, char type, char *message)
+{
+	int error = send_bytes(clientfd, &type, 1);
+
+	if(error)
+		return error;
+
+	if(message) {
+		error = send_bytes(clientfd, message, strlen(message));
+
+		if(error)
+			return error;
+	}
+
+	char new_line = '\n';
+	error = send_bytes(clientfd, &new_line, 1);
+
+	if(error)
+		return error;
+
+	return 0;
+}
+
+void handle_exit(int clientfd)
+{
+	int error = respond(clientfd, 'A', NULL);
+
+	if(error)
+		fprintf(stderr, "Error: %s\n", strerror(error));
+
 	close(clientfd);
 	printf("Child %d: Quitting\n", getpid());
 	exit(0);
 }
 
-int handle_rcd(int clientfd, char *path)
+void handle_rcd(int clientfd, char *path)
 {
-
+	if (chdir(path)) {
+		respond(clientfd, 'E', strerror(errno));
+		return;
+	}
+	respond(clientfd, 'A', NULL);
 }

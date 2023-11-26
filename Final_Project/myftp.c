@@ -5,7 +5,7 @@ TODO:
 - Implement rls handler
 	- we first need to setup a establish_data_connection() func first
 - double check all error handling
-	- lots of functions currently aren't checked if they fail
+	- lots of function calls currently aren't checked if they fail
 - Check with Prof if we need to free 100% mallocs
 	- if we are exiting (say for exit handler or fatal error), couldn't we just let OS do it?
 */
