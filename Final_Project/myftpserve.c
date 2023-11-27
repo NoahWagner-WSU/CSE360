@@ -70,7 +70,7 @@ int init_socket(int port, int back_log, int *assigned_port)
 
 	// remove port already in use error by setting socket options
 	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
-sizeof(int))) {
+	               sizeof(int))) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
 		return -1;
 	}
@@ -96,8 +96,8 @@ sizeof(int))) {
 		struct sockaddr_in serv_addr;
 		memset(&serv_addr, 0, sizeof(serv_addr));
 		int length = sizeof(serv_addr);
-		             if (getsockname(listenfd, (struct sockaddr *) &serv_addr,
-		(socklen_t *) &length)) {
+		if (getsockname(listenfd, (struct sockaddr *) &serv_addr,
+		                (socklen_t *) &length)) {
 			fprintf(stderr, "Error: %s\n", strerror(errno));
 			return -1;
 		}

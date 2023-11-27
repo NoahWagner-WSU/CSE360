@@ -308,7 +308,7 @@ void handle_exit(int ctrl_sock)
 	char type = 0;
 	char *message;
 	error = handle_response(ctrl_sock, &type, &message);
-	if(message)
+	if (message)
 		free(message);
 	exit(0);
 }
@@ -342,7 +342,7 @@ void handle_rcd(int ctrl_sock, char *path)
 	char type = 0;
 	char *message;
 	error = handle_response(ctrl_sock, &type, &message);
-	if(message)
+	if (message)
 		free(message);
 }
 
