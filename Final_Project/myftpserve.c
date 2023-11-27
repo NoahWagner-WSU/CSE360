@@ -9,7 +9,10 @@ TODO:
 - Ask Prof about error checking respond() (if write() fails) to client (how should we debug / respond, is it fatal?)
 */
 
-int init();
+// returns -1 on error (sends cooresponding error message to stderr), and socketfd on success
+// if port is 0, assigned_port will be filled with the port chosen by bind()
+// NULL can be passed to assigned_port if you aren't interested in it
+int init_socket(int port, int back_log, int *assigned_port);
 int ctrl_conn_loop(int listenfd);
 
 int send_bytes(int clientfd, char *bytes, int length);
@@ -17,18 +20,24 @@ int send_bytes(int clientfd, char *bytes, int length);
 // sends a response back to the client
 // type is either 'A' or 'E'
 // message is either NULL, a port num, or an error message
-	// message must have a null terminator
+// message must have a null terminator
 // returns 0 on success, -1 on error
 int respond(int clientfd, char type, char *message);
 
 void handle_exit(int clientfd);
 void handle_rcd(int clientfd, char *path);
+void handle_D(int clientfd);
 
 char *get_line(int fd);
 
 int main(int argc, char **argv)
 {
-	int listenfd = init();
+	int listenfd = init_socket(SERVER_PORT, BACK_LOG, NULL);
+
+	if (listenfd == -1) {
+		return errno;
+	}
+
 	int clientfd = ctrl_conn_loop(listenfd);
 
 	// we are now in the child process
@@ -40,53 +49,68 @@ int main(int argc, char **argv)
 			handle_exit(clientfd);
 		} else if (line[0] == 'C') {
 			handle_rcd(clientfd, line + 1);
+		} else if (line[0] == 'D') {
+			handle_D(clientfd);
 		}
 		free(line);
 	}
-
-	// start listening for control connections
-	// read_command(clientfd)
 
 	return 0;
 }
 
 // NOTE: the source of this function is taken from my assignment 8 source code
-int init()
+int init_socket(int port, int back_log, int *assigned_port)
 {
 	int listenfd = socket(AF_INET, SOCK_STREAM, 0);
 
 	if (listenfd == -1) {
-		perror("Error: ");
-		exit(errno);
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		return -1;
 	}
 
 	// remove port already in use error by setting socket options
-	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1}, 
-	    sizeof(int))) {
-		perror("Error: ");
-		exit(errno);
+	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
+sizeof(int))) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		return -1;
 	}
 
 	// set up server adress info
 	struct sockaddr_in serv_addr;
 	memset(&serv_addr, 0, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(SERVER_PORT);
+	serv_addr.sin_port = htons(port);
 	// just use the wildcard IP
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
 	// bind socket to ip and port
 	if (bind(listenfd, (struct sockaddr *) &serv_addr,
 	                sizeof(serv_addr)) < 0) {
-		perror("Error: ");
-		exit(errno);
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		return -1;
+	}
+
+	// retrieve the assigned port
+	if (port == 0) {
+		// set up server adress info
+		struct sockaddr_in serv_addr;
+		memset(&serv_addr, 0, sizeof(serv_addr));
+		int length = sizeof(serv_addr);
+		             if (getsockname(listenfd, (struct sockaddr *) &serv_addr,
+		(socklen_t *) &length)) {
+			fprintf(stderr, "Error: %s\n", strerror(errno));
+			return -1;
+		}
+		if (assigned_port)
+			*assigned_port = ntohs(serv_addr.sin_port);
 	}
 
 	// set socket as listening
-	if (listen(listenfd, BACK_LOG)) {
-		perror("Error: ");
-		exit(errno);
+	if (listen(listenfd, back_log)) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		return -1;
 	}
+
 	return listenfd;
 }
 
@@ -201,20 +225,20 @@ int respond(int clientfd, char type, char *message)
 {
 	int error = send_bytes(clientfd, &type, 1);
 
-	if(error)
+	if (error)
 		return error;
 
-	if(message) {
+	if (message) {
 		error = send_bytes(clientfd, message, strlen(message));
 
-		if(error)
+		if (error)
 			return error;
 	}
 
 	char new_line = '\n';
 	error = send_bytes(clientfd, &new_line, 1);
 
-	if(error)
+	if (error)
 		return error;
 
 	return 0;
@@ -224,7 +248,7 @@ void handle_exit(int clientfd)
 {
 	int error = respond(clientfd, 'A', NULL);
 
-	if(error)
+	if (error)
 		fprintf(stderr, "Error: %s\n", strerror(error));
 
 	close(clientfd);
@@ -237,13 +261,39 @@ void handle_rcd(int clientfd, char *path)
 	int error = 0;
 	if (chdir(path)) {
 		error = respond(clientfd, 'E', strerror(errno));
-		if(error)
+		if (error)
 			fprintf(stderr, "Error: %s\n", strerror(error));
 		return;
 	}
 
 	error = respond(clientfd, 'A', NULL);
 
-	if(error)
+	if (error)
 		fprintf(stderr, "Error: %s\n", strerror(error));
+}
+
+// NOTE: error check later
+void handle_D(int clientfd)
+{
+	int port_num = 0;
+	int listenfd = init_socket(SERVER_PORT, 1, &port_num);
+
+	if (listenfd == -1) {
+		respond(clientfd, 'E', "Failed to initialize data socket");
+		return;
+	}
+
+	// stringify the port number
+	char port[NI_MAXSERV] = {0};
+	sprintf(port, "%d", port_num);
+
+	respond(clientfd, 'A', port);
+
+	struct sockaddr_in client_addr;
+	int length = sizeof(client_addr);
+
+	int datafd = accept(listenfd, (struct sockaddr *) &client_addr,
+	                    (socklen_t *) &length);
+
+	// start reading from clientfd for next command, either 'L', 'G', or 'P'
 }
