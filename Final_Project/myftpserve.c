@@ -3,6 +3,7 @@
 
 /*
 TODO:
+- Make rcd and cd fail when trying to cd into non-readable directories
 - Do a passthrough of error checking (double check all system call error handling)
 	-waitpid will need more error checking
 - Implement a data connection establisher type function
@@ -286,7 +287,7 @@ void handle_C(int clientfd, char *path)
 void handle_D(int clientfd, char* path)
 {
 	int port_num = 0;
-	int listenfd = init_socket(SERVER_PORT, 1, &port_num);
+	int listenfd = init_socket(0, 1, &port_num);
 
 	if (listenfd == -1) {
 		respond(clientfd, 'E', "Failed to initialize data socket");
@@ -308,7 +309,7 @@ void handle_D(int clientfd, char* path)
 	char *line = get_line(clientfd);
 
 	if (line[0] == 'L') {
-		// handle_L(datafd);
+		handle_L(datafd);
 	} else if (line[0] == 'G') {
 		// handle_G(datafd, path);
 	} else if (line[0] == 'P') {
@@ -322,4 +323,26 @@ void handle_D(int clientfd, char* path)
 			        strerror(error));
 	}
 	free(line);
+}
+
+void handle_L(int datafd)
+{
+	// NOTE: error check later
+	int f1 = fork();
+
+	if (f1 > 0) {
+		wait(NULL);
+		close(datafd);
+		return;
+	} else if (f1 == -1) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		return;
+	}
+
+	// replace stdout with datafd
+	// NOTE: perhaps make this a function called replace(1, datafd) and do error checking in there
+	close(1); dup(datafd); close(datafd);
+	execlp("ls", "ls", "-l", (char *) NULL);
+	fprintf(stderr, "Error: %s\n", strerror(errno));
+	exit(1);
 }

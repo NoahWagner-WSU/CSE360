@@ -2,8 +2,8 @@
 
 /*
 TODO:
-- Implement rls handler
-	- we first need to setup a establish_data_connection() func first
+- Make my rls work with his client / server
+- fix all valgrind errors
 - double check all error handling
 	- lots of function calls currently aren't checked if they fail
 - Check with Prof if we need to free 100% mallocs
@@ -23,12 +23,12 @@ void handle_exit(int ctrl_sock);
 void handle_cd(char *path);
 void handle_rcd(int ctrl_sock, char *path);
 void handle_ls();
-void handle_rls(int ctrl_sock);
+void handle_rls(int ctrl_sock, char *address);
 void handle_get(int ctrl_sock, char *path);
 void handle_show(int ctrl_sock, char *path);
 void handle_put(int ctrl_sock, char *path);
 
-void handle_command(int ctrl_sock, char *cmd, char *path);
+void handle_command(int ctrl_sock, char *cmd, char *path, char *address);
 
 // reads from a file descriptor until a "\n" or EOF is reached
 // fd should only contain at most 1 line while the function executes
@@ -68,7 +68,7 @@ int main(int argc, char **argv)
 		char *path = strtok(NULL, " ");
 
 		if (cmd != NULL)
-			handle_command(ctrl_sock, cmd, path);
+			handle_command(ctrl_sock, cmd, path, argv[1]);
 
 		free(line);
 		printf("MYFTP> ");
@@ -81,7 +81,7 @@ int main(int argc, char **argv)
 	return errno;
 }
 
-void handle_command(int ctrl_sock, char *cmd, char *path)
+void handle_command(int ctrl_sock, char *cmd, char *path, char *address)
 {
 	if (!strcmp(cmd, "exit")) {
 		// printf("handle_exit()\n");
@@ -97,8 +97,8 @@ void handle_command(int ctrl_sock, char *cmd, char *path)
 		// printf("handle_ls()\n");
 		handle_ls();
 	} else if (!strcmp(cmd, "rls")) {
-		printf("handle_rls()\n");
-		// handle_rls(ctrl_sock);
+		// printf("handle_rls()\n");
+		handle_rls(ctrl_sock, address);
 	} else if (!strcmp(cmd, "get")) {
 		printf("handle_get()\n");
 		// handle_get(ctrl_sock, path);
@@ -235,7 +235,7 @@ int handle_response(int ctrl_sock, char *type, char **message)
 
 	if (bytes_read < 0) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
-		return errno;
+		return -1;
 	}
 
 	if (bytes_read == 0) {
@@ -385,4 +385,53 @@ void handle_ls()
 		exit(1);
 	}
 	fprintf(stderr, "Error: %s\n", strerror(errno));
+}
+
+void handle_rls(int ctrl_sock, char *address)
+{
+	// the segmant below can be containerized into a single function
+	/*________________________________________*/
+	int error = send_command(ctrl_sock, 'D', NULL);
+
+	if (error)
+		fprintf(stderr, "Error: %s\n", strerror(error));
+
+	char type;
+	char *message;
+	if (handle_response(ctrl_sock, &type, &message) || type == 'E') {
+		if (message)
+			free(message);
+		return;
+	}
+
+	int datafd = setup_data_conn(address, message);
+
+	if (datafd == -1) {
+		free(message);
+		return;
+	}
+
+	error = send_command(ctrl_sock, 'L', NULL);
+
+	if (error)
+		fprintf(stderr, "Error: %s\n", strerror(error));
+	/*________________________________________*/
+
+	// NOTE: error check later
+	int f1 = fork();
+
+	if (f1 > 0) {
+		wait(NULL);
+		close(datafd);
+		return;
+	} else if (f1 == -1) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		return;
+	}
+
+	// replace stdin with datafd
+	close(0); dup(datafd); close(datafd);
+	execlp("more", "more", "-20", (char *) NULL);
+	fprintf(stderr, "Error: %s\n", strerror(errno));
+	exit(1);
 }
