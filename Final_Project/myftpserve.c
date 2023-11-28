@@ -21,12 +21,15 @@ int send_bytes(int clientfd, char *bytes, int length);
 // type is either 'A' or 'E'
 // message is either NULL, a port num, or an error message
 // message must have a null terminator
-// returns 0 on success, -1 on error
+// returns 0 on success, errno on error
 int respond(int clientfd, char type, char *message);
 
-void handle_exit(int clientfd);
-void handle_rcd(int clientfd, char *path);
-void handle_D(int clientfd);
+void handle_Q(int clientfd);
+void handle_C(int clientfd, char *path);
+void handle_D(int clientfd, char *path);
+void handle_L(int datafd);
+void handle_G(int datafd, char *path);
+void handle_P(int datafd, char *path);
 
 char *get_line(int fd);
 
@@ -46,11 +49,18 @@ int main(int argc, char **argv)
 	while ((line = get_line(clientfd)) != NULL) {
 		if (line[0] == 'Q') {
 			free(line);
-			handle_exit(clientfd);
+			handle_Q(clientfd);
 		} else if (line[0] == 'C') {
-			handle_rcd(clientfd, line + 1);
+			handle_C(clientfd, line + 1);
 		} else if (line[0] == 'D') {
-			handle_D(clientfd);
+			handle_D(clientfd, line + 1);
+		} else {
+			int error = respond(clientfd, 'E',
+			                    "Unrecognized control command");
+
+			if (error)
+				fprintf(stderr, "Error: %s\n",
+				        strerror(error));
 		}
 		free(line);
 	}
@@ -70,7 +80,7 @@ int init_socket(int port, int back_log, int *assigned_port)
 
 	// remove port already in use error by setting socket options
 	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
-	               sizeof(int))) {
+	    sizeof(int))) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
 		return -1;
 	}
@@ -244,7 +254,7 @@ int respond(int clientfd, char type, char *message)
 	return 0;
 }
 
-void handle_exit(int clientfd)
+void handle_Q(int clientfd)
 {
 	int error = respond(clientfd, 'A', NULL);
 
@@ -256,7 +266,7 @@ void handle_exit(int clientfd)
 	exit(0);
 }
 
-void handle_rcd(int clientfd, char *path)
+void handle_C(int clientfd, char *path)
 {
 	int error = 0;
 	if (chdir(path)) {
@@ -273,7 +283,7 @@ void handle_rcd(int clientfd, char *path)
 }
 
 // NOTE: error check later
-void handle_D(int clientfd)
+void handle_D(int clientfd, char* path)
 {
 	int port_num = 0;
 	int listenfd = init_socket(SERVER_PORT, 1, &port_num);
@@ -295,5 +305,21 @@ void handle_D(int clientfd)
 	int datafd = accept(listenfd, (struct sockaddr *) &client_addr,
 	                    (socklen_t *) &length);
 
-	// start reading from clientfd for next command, either 'L', 'G', or 'P'
+	char *line = get_line(clientfd);
+
+	if (line[0] == 'L') {
+		// handle_L(datafd);
+	} else if (line[0] == 'G') {
+		// handle_G(datafd, path);
+	} else if (line[0] == 'P') {
+		// handle_P(datafd, path);
+	} else {
+		int error = respond(clientfd, 'E',
+		                    "Unrecognized control command");
+
+		if (error)
+			fprintf(stderr, "Error: %s\n",
+			        strerror(error));
+	}
+	free(line);
 }
