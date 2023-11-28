@@ -6,8 +6,6 @@ TODO:
 - Make rcd and cd fail when trying to cd into non-readable directories
 - Do a passthrough of error checking (double check all system call error handling)
 	-waitpid will need more error checking
-- Implement a data connection establisher type function
-- Ask Prof about error checking respond() (if write() fails) to client (how should we debug / respond, is it fatal?)
 */
 
 // returns -1 on error (sends cooresponding error message to stderr), and socketfd on success

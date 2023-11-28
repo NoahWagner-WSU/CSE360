@@ -3,11 +3,11 @@
 /*
 TODO:
 - Make my rls work with his client / server
+- Make every fail in communication (send_command / handle_response) with server fatal (aka. call exit())
 - fix all valgrind errors
 - double check all error handling
 	- lots of function calls currently aren't checked if they fail
-- Check with Prof if we need to free 100% mallocs
-	- if we are exiting (say for exit handler or fatal error), couldn't we just let OS do it?
+- check with prof if the way I wait() in handle_ls is good
 */
 
 // NOTE: code from setup_ctrl_conn, get_server_addr, and connect_to_server is taken from assignment 8
@@ -306,7 +306,7 @@ void handle_exit(int ctrl_sock)
 	}
 
 	char type = 0;
-	char *message;
+	char *message = NULL;
 	error = handle_response(ctrl_sock, &type, &message);
 	if (message)
 		free(message);
@@ -340,7 +340,7 @@ void handle_rcd(int ctrl_sock, char *path)
 	}
 
 	char type = 0;
-	char *message;
+	char *message = NULL;
 	error = handle_response(ctrl_sock, &type, &message);
 	if (message)
 		free(message);
@@ -397,7 +397,7 @@ void handle_rls(int ctrl_sock, char *address)
 		fprintf(stderr, "Error: %s\n", strerror(error));
 
 	char type;
-	char *message;
+	char *message = NULL;
 	if (handle_response(ctrl_sock, &type, &message) || type == 'E') {
 		if (message)
 			free(message);
