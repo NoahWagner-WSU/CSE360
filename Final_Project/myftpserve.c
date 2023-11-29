@@ -268,6 +268,14 @@ void handle_Q(int clientfd)
 void handle_C(int clientfd, char *path)
 {
 	int error = 0;
+
+	if(access(path, R_OK)) {
+		error = respond(clientfd, 'E', strerror(errno));
+		if (error)
+			fprintf(stderr, "Error: %s\n", strerror(error));
+		return;
+	}
+
 	if (chdir(path)) {
 		error = respond(clientfd, 'E', strerror(errno));
 		if (error)

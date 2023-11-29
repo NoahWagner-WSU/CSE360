@@ -11,12 +11,9 @@ TODO:
 */
 
 // NOTE: code from setup_ctrl_conn, get_server_addr, and connect_to_server is taken from assignment 8
-int setup_ctrl_conn(const char *address);
-int setup_data_conn(const char *address, const char *port);
-
+int setup_conn(int *fd, const char *address, const char *port);
 int get_server_addr(const char *address, const char *port,
                     struct addrinfo **resinfo);
-
 int connect_to_server(struct addrinfo *info, int *sockfd);
 
 void handle_exit(int ctrl_sock);
@@ -55,7 +52,16 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	int ctrl_sock = setup_ctrl_conn(argv[1]);
+	// stringify the port number
+	char port[NI_MAXSERV] = {0};
+	sprintf(port, "%d", SERVER_PORT);
+
+	int ctrl_sock;
+	int error;
+	if ((error = setup_conn(&ctrl_sock, argv[1], port)))
+		exit(error);
+
+	printf("Connected to server %s\n", argv[1]);
 
 	// start command loop here
 	char *line;
@@ -188,44 +194,19 @@ int connect_to_server(struct addrinfo *info, int *sockfd)
 	return 0;
 }
 
-int setup_ctrl_conn(const char *address)
+int setup_conn(int *fd, const char *address, const char *port)
 {
-	// stringify the port number
-	char port[NI_MAXSERV] = {0};
-	sprintf(port, "%d", SERVER_PORT);
-
 	struct addrinfo *info;
-	int error = get_server_addr(address, port, &info);
+	int error;
+	if ((error = get_server_addr(address, port, &info)))
+		return error;
 
-	if (error)
-		exit(error);
-
-	int sockfd;
-	error = connect_to_server(info, &sockfd);
-
-	if (error)
-		exit(error);
-
-	printf("Connected to server %s\n", address);
+	if ((error = connect_to_server(info, fd)))
+		return error;
 
 	freeaddrinfo(info);
 
-	return sockfd;
-}
-
-int setup_data_conn(const char *address, const char *port)
-{
-	struct addrinfo *info;
-	if (get_server_addr(address, port, &info))
-		return -1;
-
-	int sockfd;
-	if (connect_to_server(info, &sockfd))
-		return -1;
-
-	freeaddrinfo(info);
-
-	return sockfd;
+	return 0;
 }
 
 int handle_response(int ctrl_sock, char *type, char **message)
@@ -320,6 +301,10 @@ void handle_cd(char *path)
 		return;
 	}
 
+	if(access(path, R_OK)) {
+		fprintf(stderr, "Change directory: %s\n", strerror(errno));
+	}
+
 	if (chdir(path)) {
 		fprintf(stderr, "Change directory: %s\n", strerror(errno));
 		return;
@@ -404,9 +389,9 @@ void handle_rls(int ctrl_sock, char *address)
 		return;
 	}
 
-	int datafd = setup_data_conn(address, message);
+	int datafd;
 
-	if (datafd == -1) {
+	if (setup_conn(&datafd, address, message)) {
 		free(message);
 		return;
 	}
