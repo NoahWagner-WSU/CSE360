@@ -8,6 +8,7 @@ TODO:
 - double check all error handling
 	- lots of function calls currently aren't checked if they fail
 - check with prof if the way I wait() in handle_ls is good
+- Ask prof if we send back A before or after sending data
 */
 
 // NOTE: code from setup_ctrl_conn, get_server_addr, and connect_to_server is taken from assignment 8
@@ -15,17 +16,16 @@ int setup_conn(int *fd, const char *address, const char *port);
 int get_server_addr(const char *address, const char *port,
                     struct addrinfo **resinfo);
 int connect_to_server(struct addrinfo *info, int *sockfd);
-
-int est_data_conn(int ctrl_sock, char type, const char *address);
+int est_data_conn(int ctrl_sock, const char *address);
 
 void handle_exit(int ctrl_sock);
 void handle_cd(char *path);
 void handle_rcd(int ctrl_sock, char *path);
 void handle_ls();
 void handle_rls(int ctrl_sock, char *address);
-void handle_get(int ctrl_sock, char *path);
-void handle_show(int ctrl_sock, char *path);
-void handle_put(int ctrl_sock, char *path);
+void handle_get(int ctrl_sock, char *path, char *address);
+void handle_show(int ctrl_sock, char *path, char *address);
+void handle_put(int ctrl_sock, char *path, char *address);
 
 void handle_command(int ctrl_sock, char *cmd, char *path, char *address);
 
@@ -211,7 +211,7 @@ int setup_conn(int *fd, const char *address, const char *port)
 	return 0;
 }
 
-int est_data_conn(int ctrl_sock, char type, const char *address)
+int est_data_conn(int ctrl_sock, const char *address)
 {
 	int error = send_command(ctrl_sock, 'D', NULL);
 
@@ -232,14 +232,6 @@ int est_data_conn(int ctrl_sock, char type, const char *address)
 
 	free(port);
 
-	error = send_command(ctrl_sock, type, NULL);
-
-	if (error)
-		fprintf(stderr, "Error: %s\n", strerror(error));
-
-	if (handle_response(ctrl_sock, &res_type, NULL) || res_type == 'E')
-		return -1;
-
 	return datafd;
 }
 
@@ -250,7 +242,7 @@ int handle_response(int ctrl_sock, char *type, char **port)
 
 	if (bytes_read < 0) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
-		return -1;
+		return errno;
 	}
 
 	if (bytes_read == 0) {
@@ -260,7 +252,7 @@ int handle_response(int ctrl_sock, char *type, char **port)
 
 	char *line = get_line(ctrl_sock);
 
-	if(line == NULL) {
+	if (line == NULL) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
 		return errno;
 	}
@@ -277,7 +269,7 @@ int handle_response(int ctrl_sock, char *type, char **port)
 		return -1;
 	}
 
-	if (port) 
+	if (port)
 		*port = line;
 	else
 		free(line);
@@ -411,19 +403,25 @@ void handle_ls()
 
 void handle_rls(int ctrl_sock, char *address)
 {
-	// the segmant below can be containerized into a single function
-	int datafd = est_data_conn(ctrl_sock, 'L', address);
+	int datafd = est_data_conn(ctrl_sock, address);
 
-	if(datafd == -1) {
+	if (datafd == -1)
 		return;
-	}
 
-	// NOTE: error check later
+	// NOTE: better error checking later
 	int f1 = fork();
 
 	if (f1 > 0) {
+		int error;
+		char res_type;
+		if ((error = send_command(ctrl_sock, 'L', NULL)))
+			fprintf(stderr, "Error: %s\n", strerror(error));
+
 		wait(NULL);
 		close(datafd);
+
+		if ((error = handle_response(ctrl_sock, &res_type, NULL)))
+			exit(error);
 		return;
 	} else if (f1 == -1) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
@@ -435,4 +433,14 @@ void handle_rls(int ctrl_sock, char *address)
 	execlp("more", "more", "-20", (char *) NULL);
 	fprintf(stderr, "Error: %s\n", strerror(errno));
 	exit(1);
+}
+
+void handle_get(int ctrl_sock, char *path, char *address)
+{
+	int datafd = est_data_conn(ctrl_sock, address);
+
+	if (datafd == -1)
+		return;
+
+	
 }

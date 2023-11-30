@@ -6,7 +6,7 @@ TODO:
 - Make rcd and cd fail when trying to cd into non-readable directories
 - Do a passthrough of error checking (double check all system call error handling)
 	-waitpid will need more error checking
-	- every "Error: " replace with something like "Func Error: "
+	- every "Error: " replace with something better
 	- start making all respond() errors fatal
 */
 
@@ -345,8 +345,11 @@ void handle_L(int clientfd, int datafd)
 	int f1 = fork();
 
 	if (f1 > 0) {
-		wait(NULL);
+		int status;
+		wait(&status);
 		close(datafd);
+		if(status)
+			return;
 		if ((error = respond(clientfd, 'A', NULL))) {
 			fprintf(stderr, "Respond Error: %s\n", strerror(error));
 			exit(error);
@@ -375,5 +378,5 @@ void handle_L(int clientfd, int datafd)
 		        strerror(error));
 		exit(error);
 	}
-	exit(1);
+	exit(tmp);
 }
