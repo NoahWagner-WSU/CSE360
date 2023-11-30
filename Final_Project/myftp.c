@@ -16,6 +16,8 @@ int get_server_addr(const char *address, const char *port,
                     struct addrinfo **resinfo);
 int connect_to_server(struct addrinfo *info, int *sockfd);
 
+int est_data_conn(int ctrl_sock, char type, const char *address);
+
 void handle_exit(int ctrl_sock);
 void handle_cd(char *path);
 void handle_rcd(int ctrl_sock, char *path);
@@ -34,9 +36,9 @@ char *get_line(int fd);
 
 // fills type and message with response from server
 // type can be filled to be either 'E' or 'A'
-// message can be '\0' or <port number> on 'A', and an error message on 'E'
-// returns 0 on success, -1 if server unexpectidly closed, and errno if we failed to read
-int handle_response(int ctrl_sock, char *type, char **message);
+// message can be '\0' or <port number> if 'A', NULL if 'E' (ignored if passed NULL)
+// returns 0 on success, -1 if server unexpectidly closed or invalid type read, and errno if we failed to read
+int handle_response(int ctrl_sock, char *type, char **port);
 
 // sends a server command, appends a "\n", returns 0 on success, errno on error
 int send_command(int ctrl_sock, char cmd, char *path);
@@ -209,7 +211,39 @@ int setup_conn(int *fd, const char *address, const char *port)
 	return 0;
 }
 
-int handle_response(int ctrl_sock, char *type, char **message)
+int est_data_conn(int ctrl_sock, char type, const char *address)
+{
+	int error = send_command(ctrl_sock, 'D', NULL);
+
+	if (error)
+		fprintf(stderr, "Error: %s\n", strerror(error));
+
+	char res_type;
+	char *port = NULL;
+	if (handle_response(ctrl_sock, &res_type, &port) || res_type == 'E')
+		return -1;
+
+	int datafd;
+
+	if (setup_conn(&datafd, address, port)) {
+		free(port);
+		return -1;
+	}
+
+	free(port);
+
+	error = send_command(ctrl_sock, type, NULL);
+
+	if (error)
+		fprintf(stderr, "Error: %s\n", strerror(error));
+
+	if (handle_response(ctrl_sock, &res_type, NULL) || res_type == 'E')
+		return -1;
+
+	return datafd;
+}
+
+int handle_response(int ctrl_sock, char *type, char **port)
 {
 	// NOTE: error check later
 	int bytes_read = read(ctrl_sock, type, 1);
@@ -224,21 +258,29 @@ int handle_response(int ctrl_sock, char *type, char **message)
 		return -1;
 	}
 
-	if (message)
-		*message = get_line(ctrl_sock);
+	char *line = get_line(ctrl_sock);
 
-	if (*message == NULL) {
-		fprintf(stderr, "Error: Failed to retrieve server response\n");
-		return -1;
+	if(line == NULL) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		return errno;
 	}
 
 	if (*type == 'E') {
-		fprintf(stderr, "Server Error: %s\n", *message);
-	} else if (*type != 'A') {
+		fprintf(stderr, "Server Error: %s\n", line);
+		free(line);
+		return 0;
+	}
+
+	if (*type != 'A') {
 		fprintf(stderr,
 		        "Error: Unrecognized server response type %c\n", *type);
 		return -1;
 	}
+
+	if (port) 
+		*port = line;
+	else
+		free(line);
 
 	return 0;
 }
@@ -283,14 +325,11 @@ void handle_exit(int ctrl_sock)
 	int error = send_command(ctrl_sock, 'Q', NULL);
 	if (error) {
 		fprintf(stderr, "Error: %s\n", strerror(error));
-		exit(0);
+		exit(error);
 	}
 
 	char type = 0;
-	char *message = NULL;
-	error = handle_response(ctrl_sock, &type, &message);
-	if (message)
-		free(message);
+	handle_response(ctrl_sock, &type, NULL);
 	exit(0);
 }
 
@@ -301,8 +340,9 @@ void handle_cd(char *path)
 		return;
 	}
 
-	if(access(path, R_OK)) {
+	if (access(path, R_OK)) {
 		fprintf(stderr, "Change directory: %s\n", strerror(errno));
+		return;
 	}
 
 	if (chdir(path)) {
@@ -325,10 +365,7 @@ void handle_rcd(int ctrl_sock, char *path)
 	}
 
 	char type = 0;
-	char *message = NULL;
-	error = handle_response(ctrl_sock, &type, &message);
-	if (message)
-		free(message);
+	handle_response(ctrl_sock, &type, NULL);
 }
 
 // NOTE: code taken from assignment 4
@@ -375,32 +412,11 @@ void handle_ls()
 void handle_rls(int ctrl_sock, char *address)
 {
 	// the segmant below can be containerized into a single function
-	/*________________________________________*/
-	int error = send_command(ctrl_sock, 'D', NULL);
+	int datafd = est_data_conn(ctrl_sock, 'L', address);
 
-	if (error)
-		fprintf(stderr, "Error: %s\n", strerror(error));
-
-	char type;
-	char *message = NULL;
-	if (handle_response(ctrl_sock, &type, &message) || type == 'E') {
-		if (message)
-			free(message);
+	if(datafd == -1) {
 		return;
 	}
-
-	int datafd;
-
-	if (setup_conn(&datafd, address, message)) {
-		free(message);
-		return;
-	}
-
-	error = send_command(ctrl_sock, 'L', NULL);
-
-	if (error)
-		fprintf(stderr, "Error: %s\n", strerror(error));
-	/*________________________________________*/
 
 	// NOTE: error check later
 	int f1 = fork();

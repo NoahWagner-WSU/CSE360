@@ -6,6 +6,8 @@ TODO:
 - Make rcd and cd fail when trying to cd into non-readable directories
 - Do a passthrough of error checking (double check all system call error handling)
 	-waitpid will need more error checking
+	- every "Error: " replace with something like "Func Error: "
+	- start making all respond() errors fatal
 */
 
 // returns -1 on error (sends cooresponding error message to stderr), and socketfd on success
@@ -25,10 +27,10 @@ int respond(int clientfd, char type, char *message);
 
 void handle_Q(int clientfd);
 void handle_C(int clientfd, char *path);
-void handle_D(int clientfd, char *path);
-void handle_L(int datafd);
-void handle_G(int datafd, char *path);
-void handle_P(int datafd, char *path);
+void handle_D(int clientfd);
+void handle_L(int clientfd, int datafd);
+void handle_G(int clientfd, int datafd, char *path);
+void handle_P(int clientfd, int datafd, char *path);
 
 char *get_line(int fd);
 
@@ -52,14 +54,16 @@ int main(int argc, char **argv)
 		} else if (line[0] == 'C') {
 			handle_C(clientfd, line + 1);
 		} else if (line[0] == 'D') {
-			handle_D(clientfd, line + 1);
+			handle_D(clientfd);
 		} else {
 			int error = respond(clientfd, 'E',
 			                    "Unrecognized control command");
 
-			if (error)
+			if (error) {
 				fprintf(stderr, "Error: %s\n",
 				        strerror(error));
+				exit(error);
+			}
 		}
 		free(line);
 	}
@@ -79,7 +83,7 @@ int init_socket(int port, int back_log, int *assigned_port)
 
 	// remove port already in use error by setting socket options
 	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
-	    sizeof(int))) {
+sizeof(int))) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
 		return -1;
 	}
@@ -269,7 +273,7 @@ void handle_C(int clientfd, char *path)
 {
 	int error = 0;
 
-	if(access(path, R_OK)) {
+	if (access(path, R_OK)) {
 		error = respond(clientfd, 'E', strerror(errno));
 		if (error)
 			fprintf(stderr, "Error: %s\n", strerror(error));
@@ -290,7 +294,7 @@ void handle_C(int clientfd, char *path)
 }
 
 // NOTE: error check later
-void handle_D(int clientfd, char* path)
+void handle_D(int clientfd)
 {
 	int port_num = 0;
 	int listenfd = init_socket(0, 1, &port_num);
@@ -315,33 +319,48 @@ void handle_D(int clientfd, char* path)
 	char *line = get_line(clientfd);
 
 	if (line[0] == 'L') {
-		handle_L(datafd);
+		handle_L(clientfd, datafd);
 	} else if (line[0] == 'G') {
-		// handle_G(datafd, path);
+		// handle_G(clientfd, datafd, line + 1);
 	} else if (line[0] == 'P') {
-		// handle_P(datafd, path);
+		// handle_P(clientfd, datafd, line + 1);
 	} else {
 		int error = respond(clientfd, 'E',
 		                    "Unrecognized control command");
 
-		if (error)
-			fprintf(stderr, "Error: %s\n",
+		if (error) {
+			fprintf(stderr, "Respond Error: %s\n",
 			        strerror(error));
+			exit(error);
+		}
 	}
 	free(line);
 }
 
-void handle_L(int datafd)
+void handle_L(int clientfd, int datafd)
 {
+	int error;
+
 	// NOTE: error check later
 	int f1 = fork();
 
 	if (f1 > 0) {
 		wait(NULL);
 		close(datafd);
+		if ((error = respond(clientfd, 'A', NULL))) {
+			fprintf(stderr, "Respond Error: %s\n", strerror(error));
+			exit(error);
+		}
 		return;
 	} else if (f1 == -1) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		int tmp = errno;
+		fprintf(stderr, "Error: %s\n", strerror(tmp));
+
+		if ((error = respond(clientfd, 'E', strerror(tmp)))) {
+			fprintf(stderr, "Respond Error: %s\n",
+			        strerror(error));
+			exit(error);
+		}
 		return;
 	}
 
@@ -349,6 +368,12 @@ void handle_L(int datafd)
 	// NOTE: perhaps make this a function called replace(1, datafd) and do error checking in there
 	close(1); dup(datafd); close(datafd);
 	execlp("ls", "ls", "-l", (char *) NULL);
-	fprintf(stderr, "Error: %s\n", strerror(errno));
+	int tmp = errno;
+	fprintf(stderr, "Error: %s\n", strerror(tmp));
+	if ((error = respond(clientfd, 'E', strerror(tmp)))) {
+		fprintf(stderr, "Respond Error: %s\n",
+		        strerror(error));
+		exit(error);
+	}
 	exit(1);
 }
