@@ -5,7 +5,7 @@
 TODO:
 - Make rcd and cd fail when trying to cd into non-readable directories
 - Do a passthrough of error checking (double check all system call error handling)
-	-waitpid will need more error checking
+	- waitpid will need more error checking
 	- every "Error: " replace with something better
 	- start making all respond() errors fatal
 */
@@ -341,29 +341,21 @@ void handle_L(int clientfd, int datafd)
 {
 	int error;
 
+	if ((error = respond(clientfd, 'A', NULL))) {
+		fprintf(stderr, "Respond Error: %s\n", strerror(error));
+		exit(error);
+	}
+
 	// NOTE: error check later
 	int f1 = fork();
 
 	if (f1 > 0) {
-		int status;
-		wait(&status);
 		close(datafd);
-		if(status)
-			return;
-		if ((error = respond(clientfd, 'A', NULL))) {
-			fprintf(stderr, "Respond Error: %s\n", strerror(error));
-			exit(error);
-		}
+		wait(NULL);
 		return;
 	} else if (f1 == -1) {
 		int tmp = errno;
 		fprintf(stderr, "Error: %s\n", strerror(tmp));
-
-		if ((error = respond(clientfd, 'E', strerror(tmp)))) {
-			fprintf(stderr, "Respond Error: %s\n",
-			        strerror(error));
-			exit(error);
-		}
 		return;
 	}
 
@@ -373,10 +365,5 @@ void handle_L(int clientfd, int datafd)
 	execlp("ls", "ls", "-l", (char *) NULL);
 	int tmp = errno;
 	fprintf(stderr, "Error: %s\n", strerror(tmp));
-	if ((error = respond(clientfd, 'E', strerror(tmp)))) {
-		fprintf(stderr, "Respond Error: %s\n",
-		        strerror(error));
-		exit(error);
-	}
 	exit(tmp);
 }

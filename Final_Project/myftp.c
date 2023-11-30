@@ -405,6 +405,14 @@ void handle_rls(int ctrl_sock, char *address)
 {
 	int datafd = est_data_conn(ctrl_sock, address);
 
+	int error;
+	char res_type;
+	if ((error = send_command(ctrl_sock, 'L', NULL)))
+		fprintf(stderr, "Error: %s\n", strerror(error));
+
+	if ((error = handle_response(ctrl_sock, &res_type, NULL)))
+		exit(error);
+
 	if (datafd == -1)
 		return;
 
@@ -412,16 +420,8 @@ void handle_rls(int ctrl_sock, char *address)
 	int f1 = fork();
 
 	if (f1 > 0) {
-		int error;
-		char res_type;
-		if ((error = send_command(ctrl_sock, 'L', NULL)))
-			fprintf(stderr, "Error: %s\n", strerror(error));
-
 		wait(NULL);
 		close(datafd);
-
-		if ((error = handle_response(ctrl_sock, &res_type, NULL)))
-			exit(error);
 		return;
 	} else if (f1 == -1) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
@@ -437,10 +437,20 @@ void handle_rls(int ctrl_sock, char *address)
 
 void handle_get(int ctrl_sock, char *path, char *address)
 {
+
+	// first check last bit of file path to see if it already exists
+	// return if file already exists, send error message to stderr
+	// probably use access here
+
+	// establish a data connection once we know we can take the file
 	int datafd = est_data_conn(ctrl_sock, address);
 
 	if (datafd == -1)
 		return;
 
-	
+	// open the new file with the last part of path as its name
+
+	// send 'G' and start reading from datafd
+
+	// handle server response
 }
