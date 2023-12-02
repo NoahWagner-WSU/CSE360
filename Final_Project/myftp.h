@@ -11,6 +11,9 @@
 #include <sys/wait.h>
 #include <time.h>
 #include <limits.h>
+#include <libgen.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 
 // move all shared function declarations here
 

@@ -108,8 +108,8 @@ void handle_command(int ctrl_sock, char *cmd, char *path, char *address)
 		// printf("handle_rls()\n");
 		handle_rls(ctrl_sock, address);
 	} else if (!strcmp(cmd, "get")) {
-		printf("handle_get()\n");
-		// handle_get(ctrl_sock, path);
+		// printf("handle_get()\n");
+		handle_get(ctrl_sock, path, address);
 	} else if (!strcmp(cmd, "show")) {
 		printf("handle_show()\n");
 		// handle_show(ctrl_sock, path);
@@ -437,10 +437,21 @@ void handle_rls(int ctrl_sock, char *address)
 
 void handle_get(int ctrl_sock, char *path, char *address)
 {
+	if (!path) {
+		fprintf(stderr, "Command error: expecting a parameter.\n");
+		return;
+	}
 
-	// first check last bit of file path to see if it already exists
-	// return if file already exists, send error message to stderr
-	// probably use access here
+	char *file_name = basename(path);
+
+	struct stat s;
+
+	if (lstat(file_name, &s) == 0 && !S_ISDIR(s.st_mode)) {
+		fprintf(stderr,
+		        "Get Canceled: %s already exists in current directory\n",
+		        file_name);
+		return;
+	}
 
 	// establish a data connection once we know we can take the file
 	int datafd = est_data_conn(ctrl_sock, address);
@@ -448,9 +459,43 @@ void handle_get(int ctrl_sock, char *path, char *address)
 	if (datafd == -1)
 		return;
 
-	// open the new file with the last part of path as its name
-
+	int error;
 	// send 'G' and start reading from datafd
+	if ((error = send_command(ctrl_sock, 'G', path))) {
+		fprintf(stderr, "Error: %s\n", strerror(error));
+		exit(error);
+	}
 
 	// handle server response
+	char res_type;
+	if ((error = handle_response(ctrl_sock, &res_type, NULL))) {
+		exit(error);
+	}
+
+	if (res_type == 'E') {
+		close(datafd);
+		return;
+	}
+
+	int newfd = open(file_name, O_CREAT | O_EXCL | O_WRONLY, 0644);
+
+	if (newfd == -1) {
+		fprintf(stderr, "File Open Error: %s\n", strerror(errno));
+		close(datafd);
+		return;
+	}
+
+	// copy data from datafd to newfd
+	int actual;
+	char buffer[READ_BUFFER_SIZE] = {0};
+	while ((actual = read(datafd, buffer, READ_BUFFER_SIZE)) > 0) {
+		write(newfd, buffer, actual);
+	}
+
+	if (actual < 0) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		unlink(file_name);
+	}
+
+	close(newfd); close(datafd);
 }

@@ -367,3 +367,12 @@ void handle_L(int clientfd, int datafd)
 	fprintf(stderr, "Error: %s\n", strerror(tmp));
 	exit(tmp);
 }
+
+void handle_G(int clientfd, int datafd, char *path)
+{
+	// respond E if path doesn't exist, else respond with A (use access() here)
+
+	// open the file at path (use open() here)
+
+	// start writing to datafd the contents of path
+}
