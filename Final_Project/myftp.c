@@ -2,13 +2,11 @@
 
 /*
 TODO:
-- Make my rls work with his client / server
-- Make every fail in communication (send_command / handle_response) with server fatal (aka. call exit())
+- Make every fail in communication (send_msg / handle_response) with server fatal (aka. call exit())
 - fix all valgrind errors
 - double check all error handling
 	- lots of function calls currently aren't checked if they fail
 - check with prof if the way I wait() in handle_ls is good
-- Ask prof if we send back A before or after sending data
 */
 
 // NOTE: code from setup_ctrl_conn, get_server_addr, and connect_to_server is taken from assignment 8
@@ -41,10 +39,7 @@ char *get_line(int fd);
 int handle_response(int ctrl_sock, char *type, char **port);
 
 // sends a server command, appends a "\n", returns 0 on success, errno on error
-int send_command(int ctrl_sock, char cmd, char *path);
-
-// sends a series of bytes to the server, 0 on success, errno on error
-int send_bytes(int ctrl_sock, char *bytes, int length);
+void send_msg(int ctrl_sock, char type, char *msg);
 
 int main(int argc, char **argv)
 {
@@ -213,10 +208,7 @@ int setup_conn(int *fd, const char *address, const char *port)
 
 int est_data_conn(int ctrl_sock, const char *address)
 {
-	int error = send_command(ctrl_sock, 'D', NULL);
-
-	if (error)
-		fprintf(stderr, "Error: %s\n", strerror(error));
+	send_msg(ctrl_sock, 'D', NULL);
 
 	char res_type;
 	char *port = NULL;
@@ -277,48 +269,42 @@ int handle_response(int ctrl_sock, char *type, char **port)
 	return 0;
 }
 
-int send_command(int ctrl_sock, char cmd, char *path)
+void send_msg(int ctrl_sock, char type, char *msg)
 {
-	int result = send_bytes(ctrl_sock, &cmd, 1);
+	int tmp_errno;
+	if (write(ctrl_sock, &type, 1) == -1) {
+		tmp_errno = errno;
+		fprintf(stderr,
+		        "Fatal Write Error: %s\n",
+		        strerror(tmp_errno));
+		exit(tmp_errno);
+	}
 
-	if (result)
-		return result;
-
-	if (path) {
-		result = send_bytes(ctrl_sock, path, strlen(path));
-		if (result)
-			return result;
+	if (msg) {
+		if (write(ctrl_sock, msg, strlen(msg)) == -1) {
+			tmp_errno = errno;
+			fprintf(stderr,
+			        "Fatal Write Error: %s\n",
+			        strerror(tmp_errno));
+			exit(tmp_errno);
+		}
 	}
 
 	char new_line = '\n';
-	result = send_bytes(ctrl_sock, &new_line, 1);
 
-	if (result)
-		return result;
-	return 0;
-}
-
-int send_bytes(int ctrl_sock, char *bytes, int length)
-{
-	int result = 0;
-	int actual = 0;
-	while (actual < length) {
-		result = write(ctrl_sock, bytes + actual, length - actual);
-		if (result < 0)
-			return errno;
-		actual += result;
+	if (write(ctrl_sock, &new_line, 1) == -1) {
+		tmp_errno = errno;
+		fprintf(stderr,
+		        "Fatal Write Error: %s\n",
+		        strerror(tmp_errno));
+		exit(tmp_errno);
 	}
-	return 0;
 }
 
 void handle_exit(int ctrl_sock)
 {
 	// NOTE: error check later
-	int error = send_command(ctrl_sock, 'Q', NULL);
-	if (error) {
-		fprintf(stderr, "Error: %s\n", strerror(error));
-		exit(error);
-	}
+	send_msg(ctrl_sock, 'Q', NULL);
 
 	char type = 0;
 	handle_response(ctrl_sock, &type, NULL);
@@ -350,11 +336,7 @@ void handle_rcd(int ctrl_sock, char *path)
 		return;
 	}
 
-	int error = send_command(ctrl_sock, 'C', path);
-
-	if (error) {
-		fprintf(stderr, "Error: %s\n", strerror(error));
-	}
+	send_msg(ctrl_sock, 'C', path);
 
 	char type = 0;
 	handle_response(ctrl_sock, &type, NULL);
@@ -407,8 +389,8 @@ void handle_rls(int ctrl_sock, char *address)
 
 	int error;
 	char res_type;
-	if ((error = send_command(ctrl_sock, 'L', NULL)))
-		fprintf(stderr, "Error: %s\n", strerror(error));
+
+	send_msg(ctrl_sock, 'L', NULL);
 
 	if ((error = handle_response(ctrl_sock, &res_type, NULL)))
 		exit(error);
@@ -444,12 +426,15 @@ void handle_get(int ctrl_sock, char *path, char *address)
 
 	char *file_name = basename(path);
 
-	struct stat s;
-
-	if (lstat(file_name, &s) == 0 && !S_ISDIR(s.st_mode)) {
+	if (access(file_name, F_OK) == 0) {
 		fprintf(stderr,
 		        "Get Canceled: %s already exists in current directory\n",
 		        file_name);
+		return;
+	}
+
+	if (errno != ENOENT) {
+		fprintf(stderr, "Get Error: %s\n", strerror(errno));
 		return;
 	}
 
@@ -460,11 +445,9 @@ void handle_get(int ctrl_sock, char *path, char *address)
 		return;
 
 	int error;
+
 	// send 'G' and start reading from datafd
-	if ((error = send_command(ctrl_sock, 'G', path))) {
-		fprintf(stderr, "Error: %s\n", strerror(error));
-		exit(error);
-	}
+	send_msg(ctrl_sock, 'G', path);
 
 	// handle server response
 	char res_type;

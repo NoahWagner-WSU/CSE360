@@ -3,11 +3,12 @@
 
 /*
 TODO:
-- Make rcd and cd fail when trying to cd into non-readable directories
+- perhaps add a copy function that reads and writes data from one fd to another
+- add a print(string) function that prints a string of the form, "Child <pid>: <string>"
+	- use this to print info about rcd and other handlers
 - Do a passthrough of error checking (double check all system call error handling)
 	- waitpid will need more error checking
 	- every "Error: " replace with something better
-	- start making all respond() errors fatal
 */
 
 // returns -1 on error (sends cooresponding error message to stderr), and socketfd on success
@@ -16,14 +17,12 @@ TODO:
 int init_socket(int port, int back_log, int *assigned_port);
 int ctrl_conn_loop(int listenfd);
 
-int send_bytes(int clientfd, char *bytes, int length);
-
 // sends a response back to the client
 // type is either 'A' or 'E'
 // message is either NULL, a port num, or an error message
 // message must have a null terminator
-// returns 0 on success, errno on error
-int respond(int clientfd, char type, char *message);
+// exits on write error
+void send_msg(int ctrl_sock, char type, char *msg);
 
 void handle_Q(int clientfd);
 void handle_C(int clientfd, char *path);
@@ -56,14 +55,8 @@ int main(int argc, char **argv)
 		} else if (line[0] == 'D') {
 			handle_D(clientfd);
 		} else {
-			int error = respond(clientfd, 'E',
-			                    "Unrecognized control command");
-
-			if (error) {
-				fprintf(stderr, "Error: %s\n",
-				        strerror(error));
-				exit(error);
-			}
+			send_msg(clientfd, 'E',
+			         "Unrecognized control command");
 		}
 		free(line);
 	}
@@ -83,7 +76,7 @@ int init_socket(int port, int back_log, int *assigned_port)
 
 	// remove port already in use error by setting socket options
 	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
-sizeof(int))) {
+	    sizeof(int))) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
 		return -1;
 	}
@@ -221,49 +214,41 @@ char *get_line(int fd)
 	return result;
 }
 
-int send_bytes(int clientfd, char *bytes, int length)
+void send_msg(int ctrl_sock, char type, char *msg)
 {
-	int result = 0;
-	int actual = 0;
-	while (actual < length) {
-		result = write(clientfd, bytes + actual, length - actual);
-		if (result < 0)
-			return errno;
-		actual += result;
+	int tmp_errno;
+	if (write(ctrl_sock, &type, 1) == -1) {
+		tmp_errno = errno;
+		fprintf(stderr,
+		        "Fatal Write Error: %s\n",
+		        strerror(tmp_errno));
+		exit(tmp_errno);
 	}
-	return 0;
-}
 
-int respond(int clientfd, char type, char *message)
-{
-	int error = send_bytes(clientfd, &type, 1);
-
-	if (error)
-		return error;
-
-	if (message) {
-		error = send_bytes(clientfd, message, strlen(message));
-
-		if (error)
-			return error;
+	if (msg) {
+		if (write(ctrl_sock, msg, strlen(msg)) == -1) {
+			tmp_errno = errno;
+			fprintf(stderr,
+			        "Fatal Write Error: %s\n",
+			        strerror(tmp_errno));
+			exit(tmp_errno);
+		}
 	}
 
 	char new_line = '\n';
-	error = send_bytes(clientfd, &new_line, 1);
 
-	if (error)
-		return error;
-
-	return 0;
+	if (write(ctrl_sock, &new_line, 1) == -1) {
+		tmp_errno = errno;
+		fprintf(stderr,
+		        "Fatal Write Error: %s\n",
+		        strerror(tmp_errno));
+		exit(tmp_errno);
+	}
 }
 
 void handle_Q(int clientfd)
 {
-	int error = respond(clientfd, 'A', NULL);
-
-	if (error)
-		fprintf(stderr, "Error: %s\n", strerror(error));
-
+	send_msg(clientfd, 'A', NULL);
 	close(clientfd);
 	printf("Child %d: Quitting\n", getpid());
 	exit(0);
@@ -271,26 +256,17 @@ void handle_Q(int clientfd)
 
 void handle_C(int clientfd, char *path)
 {
-	int error = 0;
-
 	if (access(path, R_OK)) {
-		error = respond(clientfd, 'E', strerror(errno));
-		if (error)
-			fprintf(stderr, "Error: %s\n", strerror(error));
+		send_msg(clientfd, 'E', strerror(errno));
 		return;
 	}
 
 	if (chdir(path)) {
-		error = respond(clientfd, 'E', strerror(errno));
-		if (error)
-			fprintf(stderr, "Error: %s\n", strerror(error));
+		send_msg(clientfd, 'E', strerror(errno));
 		return;
 	}
 
-	error = respond(clientfd, 'A', NULL);
-
-	if (error)
-		fprintf(stderr, "Error: %s\n", strerror(error));
+	send_msg(clientfd, 'A', NULL);
 }
 
 // NOTE: error check later
@@ -300,7 +276,7 @@ void handle_D(int clientfd)
 	int listenfd = init_socket(0, 1, &port_num);
 
 	if (listenfd == -1) {
-		respond(clientfd, 'E', "Failed to initialize data socket");
+		send_msg(clientfd, 'E', "Failed to initialize data socket");
 		return;
 	}
 
@@ -308,7 +284,7 @@ void handle_D(int clientfd)
 	char port[NI_MAXSERV] = {0};
 	sprintf(port, "%d", port_num);
 
-	respond(clientfd, 'A', port);
+	send_msg(clientfd, 'A', port);
 
 	struct sockaddr_in client_addr;
 	int length = sizeof(client_addr);
@@ -321,18 +297,12 @@ void handle_D(int clientfd)
 	if (line[0] == 'L') {
 		handle_L(clientfd, datafd);
 	} else if (line[0] == 'G') {
-		// handle_G(clientfd, datafd, line + 1);
+		handle_G(clientfd, datafd, line + 1);
 	} else if (line[0] == 'P') {
 		// handle_P(clientfd, datafd, line + 1);
 	} else {
-		int error = respond(clientfd, 'E',
-		                    "Unrecognized control command");
-
-		if (error) {
-			fprintf(stderr, "Respond Error: %s\n",
-			        strerror(error));
-			exit(error);
-		}
+		send_msg(clientfd, 'E',
+		         "Unrecognized control command");
 	}
 	free(line);
 }
@@ -341,10 +311,7 @@ void handle_L(int clientfd, int datafd)
 {
 	int error;
 
-	if ((error = respond(clientfd, 'A', NULL))) {
-		fprintf(stderr, "Respond Error: %s\n", strerror(error));
-		exit(error);
-	}
+	send_msg(clientfd, 'A', NULL);
 
 	// NOTE: error check later
 	int f1 = fork();
@@ -370,9 +337,40 @@ void handle_L(int clientfd, int datafd)
 
 void handle_G(int clientfd, int datafd, char *path)
 {
-	// respond E if path doesn't exist, else respond with A (use access() here)
+	if (access(path, R_OK)) {
+		send_msg(clientfd, 'E', strerror(errno));
+		return;
+	}
+
+	struct stat s;
+	if (lstat(path, &s)) {
+		send_msg(clientfd, 'E', strerror(errno));
+		return;
+	}
+
+	if (!S_ISREG(s.st_mode)) {
+		send_msg(clientfd, 'E', "File is not a regular");
+		return;
+	}
+
+	send_msg(clientfd, 'A', NULL);
 
 	// open the file at path (use open() here)
+	int openfd = open(path, O_RDONLY);
 
-	// start writing to datafd the contents of path
+	if(openfd == -1) {
+		fprintf(stderr, "File Open Error: %s\n", strerror(errno));
+		close(datafd);
+		return;
+	}
+
+	int actual;
+	char buffer[READ_BUFFER_SIZE] = {0};
+	while ((actual = read(openfd, buffer, READ_BUFFER_SIZE)) > 0)
+		write(datafd, buffer, actual);
+
+	if (actual < 0)
+		fprintf(stderr, "Read Error: %s\n", strerror(errno));
+
+	close(datafd);
 }
