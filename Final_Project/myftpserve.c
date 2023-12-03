@@ -349,7 +349,7 @@ void handle_G(int clientfd, int datafd, char *path)
 	}
 
 	if (!S_ISREG(s.st_mode)) {
-		send_msg(clientfd, 'E', "File is not a regular");
+		send_msg(clientfd, 'E', "File is not regular");
 		return;
 	}
 

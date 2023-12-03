@@ -87,27 +87,20 @@ int main(int argc, char **argv)
 void handle_command(int ctrl_sock, char *cmd, char *path, char *address)
 {
 	if (!strcmp(cmd, "exit")) {
-		// printf("handle_exit()\n");
 		free(cmd);
 		handle_exit(ctrl_sock);
 	} else if (!strcmp(cmd, "cd")) {
-		// printf("handle_cd()\n");
 		handle_cd(path);
 	} else if (!strcmp(cmd, "rcd")) {
-		// printf("handle_rcd()\n");
 		handle_rcd(ctrl_sock, path);
 	} else if (!strcmp(cmd, "ls")) {
-		// printf("handle_ls()\n");
 		handle_ls();
 	} else if (!strcmp(cmd, "rls")) {
-		// printf("handle_rls()\n");
 		handle_rls(ctrl_sock, address);
 	} else if (!strcmp(cmd, "get")) {
-		// printf("handle_get()\n");
 		handle_get(ctrl_sock, path, address);
 	} else if (!strcmp(cmd, "show")) {
-		printf("handle_show()\n");
-		// handle_show(ctrl_sock, path);
+		handle_show(ctrl_sock, path, address);
 	} else if (!strcmp(cmd, "put")) {
 		printf("handle_put()\n");
 		// handle_put(ctrl_sock, path);
@@ -402,11 +395,12 @@ void handle_rls(int ctrl_sock, char *address)
 	int f1 = fork();
 
 	if (f1 > 0) {
-		wait(NULL);
 		close(datafd);
+		wait(NULL);
 		return;
 	} else if (f1 == -1) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
+		close(datafd);
 		return;
 	}
 
@@ -414,7 +408,7 @@ void handle_rls(int ctrl_sock, char *address)
 	close(0); dup(datafd); close(datafd);
 	execlp("more", "more", "-20", (char *) NULL);
 	fprintf(stderr, "Error: %s\n", strerror(errno));
-	exit(1);
+	exit(errno);
 }
 
 void handle_get(int ctrl_sock, char *path, char *address)
@@ -451,9 +445,8 @@ void handle_get(int ctrl_sock, char *path, char *address)
 
 	// handle server response
 	char res_type;
-	if ((error = handle_response(ctrl_sock, &res_type, NULL))) {
+	if ((error = handle_response(ctrl_sock, &res_type, NULL)))
 		exit(error);
-	}
 
 	if (res_type == 'E') {
 		close(datafd);
@@ -481,4 +474,49 @@ void handle_get(int ctrl_sock, char *path, char *address)
 	}
 
 	close(newfd); close(datafd);
+}
+
+void handle_show(int ctrl_sock, char *path, char *address)
+{
+	if (!path) {
+		fprintf(stderr, "Command error: expecting a parameter.\n");
+		return;
+	}
+
+	// establish a data connection once we know we can take the file
+	int datafd = est_data_conn(ctrl_sock, address);
+
+	if (datafd == -1)
+		return;
+
+	// send 'G' and start reading from datafd
+	send_msg(ctrl_sock, 'G', path);
+
+	int error;
+	char res_type;
+	if ((error = handle_response(ctrl_sock, &res_type, NULL)))
+		exit(error);
+
+	if (res_type == 'E') {
+		close(datafd);
+		return;
+	}
+
+	int f1 = fork();
+
+	if (f1 > 0) {
+		close(datafd);
+		wait(NULL);
+		return;
+	} else if (f1 == -1) {
+		fprintf(stderr, "Error: %s\n", strerror(errno));
+		close(datafd);
+		return;
+	}
+
+	// replace stdin with datafd
+	close(0); dup(datafd); close(datafd);
+	execlp("more", "more", "-20", (char *) NULL);
+	fprintf(stderr, "Error: %s\n", strerror(errno));
+	exit(errno);
 }
