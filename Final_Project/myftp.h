@@ -20,3 +20,6 @@
 #define SERVER_PORT 49999
 
 #define READ_BUFFER_SIZE 1024
+
+char *get_line(int fd);
+void send_msg(int ctrl_sock, char type, char *msg);

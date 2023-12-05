@@ -28,19 +28,11 @@ void handle_put(int ctrl_sock, char *path, char *address);
 
 void handle_command(int ctrl_sock, char *cmd, char *path, char *address);
 
-// reads from a file descriptor until a "\n" or EOF is reached
-// fd should only contain at most 1 line while the function executes
-// returns the line on success, NULL on error
-char *get_line(int fd);
-
 // fills type and message with response from server
 // type can be filled to be either 'E' or 'A'
 // message can be '\0' or <port number> if 'A', NULL if 'E' (ignored if passed NULL)
 // returns 0 on success, -1 if server unexpectidly closed or invalid type read, and errno if we failed to read
 int handle_response(int ctrl_sock, char *type, char **port);
-
-// sends a server command, appends a "\n", returns 0 on success, errno on error
-void send_msg(int ctrl_sock, char type, char *msg);
 
 int main(int argc, char **argv)
 {
@@ -80,7 +72,6 @@ int main(int argc, char **argv)
 	}
 
 	// get_line failed, meaning read() failed
-	// i don't think this is a fatal error, consider kep trying to read
 	fprintf(stderr, "%s\n", strerror(errno));
 	return errno;
 }
@@ -227,19 +218,19 @@ int handle_response(int ctrl_sock, char *type, char **port)
 
 	if (bytes_read < 0) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
-		return errno;
+		exit(errno);
 	}
 
 	if (bytes_read == 0) {
 		fprintf(stderr, "Error: control socket closed unexpectedly\n");
-		return -1;
+		exit(EXIT_FAILURE);
 	}
 
 	char *line = get_line(ctrl_sock);
 
 	if (line == NULL) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
-		return errno;
+		exit(errno);
 	}
 
 	if (*type == 'E') {
@@ -380,16 +371,15 @@ void handle_rls(int ctrl_sock, char *address)
 {
 	int datafd = est_data_conn(ctrl_sock, address);
 
+	if (datafd == -1)
+		return;
+
 	int error;
 	char res_type;
 
 	send_msg(ctrl_sock, 'L', NULL);
 
-	if ((error = handle_response(ctrl_sock, &res_type, NULL)))
-		exit(error);
-
-	if (datafd == -1)
-		return;
+	handle_response(ctrl_sock, &res_type, NULL);
 
 	// NOTE: better error checking later
 	int f1 = fork();
@@ -445,8 +435,7 @@ void handle_get(int ctrl_sock, char *path, char *address)
 
 	// handle server response
 	char res_type;
-	if ((error = handle_response(ctrl_sock, &res_type, NULL)))
-		exit(error);
+	handle_response(ctrl_sock, &res_type, NULL);
 
 	if (res_type == 'E') {
 		close(datafd);
@@ -492,8 +481,7 @@ void handle_show(int ctrl_sock, char *path, char *address)
 
 	int error;
 	char res_type;
-	if ((error = handle_response(ctrl_sock, &res_type, NULL)))
-		exit(error);
+	handle_response(ctrl_sock, &res_type, NULL);
 
 	if (res_type == 'E') {
 		close(datafd);
@@ -558,8 +546,7 @@ void handle_put(int ctrl_sock, char *path, char *address)
 
 	int error;
 	char res_type;
-	if((error = handle_response(ctrl_sock, &res_type, NULL)))
-		exit(error);
+	handle_response(ctrl_sock, &res_type, NULL);
 
 	if(res_type == 'E') {
 		close(datafd);

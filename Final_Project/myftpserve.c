@@ -17,21 +17,12 @@ TODO:
 int init_socket(int port, int back_log, int *assigned_port);
 int ctrl_conn_loop(int listenfd);
 
-// sends a response back to the client
-// type is either 'A' or 'E'
-// message is either NULL, a port num, or an error message
-// message must have a null terminator
-// exits on write error
-void send_msg(int ctrl_sock, char type, char *msg);
-
 void handle_Q(int clientfd);
 void handle_C(int clientfd, char *path);
 void handle_D(int clientfd);
 void handle_L(int clientfd, int datafd);
 void handle_G(int clientfd, int datafd, char *path);
 void handle_P(int clientfd, int datafd, char *path);
-
-char *get_line(int fd);
 
 int main(int argc, char **argv)
 {
