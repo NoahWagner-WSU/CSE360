@@ -23,3 +23,4 @@
 
 char *get_line(int fd);
 void send_msg(int ctrl_sock, char type, char *msg);
+int copy(int src, int dst);

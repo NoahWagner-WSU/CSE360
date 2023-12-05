@@ -3,7 +3,6 @@
 /*
 TODO:
 - Any repeated code in put / show / get functions, make into their own functions (same on server)
-- Make every fail in communication (handle_response) with server fatal (aka. call exit())
 - fix all valgrind errors
 - double check all error handling
 	- lots of function calls currently aren't checked if they fail
@@ -285,6 +284,15 @@ void send_msg(int ctrl_sock, char type, char *msg)
 	}
 }
 
+int copy(int src, int dst)
+{
+	int actual;
+	char buffer[READ_BUFFER_SIZE] = {0};
+	while ((actual = read(src, buffer, READ_BUFFER_SIZE)) > 0)
+		write(dst, buffer, actual);
+	return actual;
+}
+
 void handle_exit(int ctrl_sock)
 {
 	// NOTE: error check later
@@ -450,13 +458,7 @@ void handle_get(int ctrl_sock, char *path, char *address)
 		return;
 	}
 
-	// copy data from datafd to newfd
-	int actual;
-	char buffer[READ_BUFFER_SIZE] = {0};
-	while ((actual = read(datafd, buffer, READ_BUFFER_SIZE)) > 0)
-		write(newfd, buffer, actual);
-
-	if (actual < 0) {
+	if (copy(datafd, newfd) < 0) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
 		unlink(file_name);
 	}
@@ -553,12 +555,7 @@ void handle_put(int ctrl_sock, char *path, char *address)
 		return;
 	}
 
-	int actual;
-	char buffer[READ_BUFFER_SIZE] = {0};
-	while ((actual = read(openfd, buffer, READ_BUFFER_SIZE)) > 0)
-		write(datafd, buffer, actual);
-
-	if (actual < 0)
+	if (copy(openfd, datafd) < 0)
 		fprintf(stderr, "Read Error: %s\n", strerror(errno));
 
 	close(datafd); close(openfd);

@@ -3,9 +3,6 @@
 
 /*
 TODO:
-- perhaps add a copy function that reads and writes data from one fd to another
-- add a print(string) function that prints a string of the form, "Child <pid>: <string>"
-	- use this to print various server actions (like rcd, trasmitting data with get, etc.)
 - Do a passthrough of error checking (double check all system call error handling)
 	- waitpid will need more error checking
 	- every "Error: " replace with something better
@@ -237,6 +234,15 @@ void send_msg(int ctrl_sock, char type, char *msg)
 	}
 }
 
+int copy(int src, int dst)
+{
+	int actual;
+	char buffer[READ_BUFFER_SIZE] = {0};
+	while ((actual = read(src, buffer, READ_BUFFER_SIZE)) > 0)
+		write(dst, buffer, actual);
+	return actual;
+}
+
 void handle_Q(int clientfd)
 {
 	send_msg(clientfd, 'A', NULL);
@@ -257,6 +263,7 @@ void handle_C(int clientfd, char *path)
 		return;
 	}
 
+	printf("Child %d: Changed directory to %s\n", getpid(), path);
 	send_msg(clientfd, 'A', NULL);
 }
 
@@ -303,6 +310,7 @@ void handle_L(int clientfd, int datafd)
 	int error;
 
 	send_msg(clientfd, 'A', NULL);
+	printf("Child %d: Sending ls content\n", getpid());
 
 	// NOTE: error check later
 	int f1 = fork();
@@ -357,12 +365,9 @@ void handle_G(int clientfd, int datafd, char *path)
 		return;
 	}
 
-	int actual;
-	char buffer[READ_BUFFER_SIZE] = {0};
-	while ((actual = read(openfd, buffer, READ_BUFFER_SIZE)) > 0)
-		write(datafd, buffer, actual);
+	printf("Child %d: Transmitting contents of file %s\n", getpid(), path);
 
-	if (actual < 0)
+	if (copy(openfd, datafd) < 0)
 		fprintf(stderr, "Read Error: %s\n", strerror(errno));
 
 	close(datafd);
@@ -382,12 +387,9 @@ void handle_P(int clientfd, int datafd, char *path)
 
 	send_msg(clientfd, 'A', NULL);
 
-	int actual;
-	char buffer[READ_BUFFER_SIZE] = {0};
-	while ((actual = read(datafd, buffer, READ_BUFFER_SIZE)) > 0)
-		write(newfd, buffer, actual);
+	printf("Child %d: Recieving contents for file %s\n", getpid(), path);
 
-	if (actual < 0) {
+	if (copy(datafd, newfd) < 0) {
 		fprintf(stderr, "Read Error: %s\n", strerror(errno));
 		unlink(path);
 	}
