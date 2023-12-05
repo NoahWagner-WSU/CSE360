@@ -2,7 +2,8 @@
 
 /*
 TODO:
-- Make every fail in communication (send_msg / handle_response) with server fatal (aka. call exit())
+- Any repeated code in put / show / get functions, make into their own functions (same on server)
+- Make every fail in communication (handle_response) with server fatal (aka. call exit())
 - fix all valgrind errors
 - double check all error handling
 	- lots of function calls currently aren't checked if they fail
@@ -102,8 +103,7 @@ void handle_command(int ctrl_sock, char *cmd, char *path, char *address)
 	} else if (!strcmp(cmd, "show")) {
 		handle_show(ctrl_sock, path, address);
 	} else if (!strcmp(cmd, "put")) {
-		printf("handle_put()\n");
-		// handle_put(ctrl_sock, path);
+		handle_put(ctrl_sock, path, address);
 	} else {
 		printf("Command '%s' is unknown - ignored\n", cmd);
 	}
@@ -464,9 +464,8 @@ void handle_get(int ctrl_sock, char *path, char *address)
 	// copy data from datafd to newfd
 	int actual;
 	char buffer[READ_BUFFER_SIZE] = {0};
-	while ((actual = read(datafd, buffer, READ_BUFFER_SIZE)) > 0) {
+	while ((actual = read(datafd, buffer, READ_BUFFER_SIZE)) > 0)
 		write(newfd, buffer, actual);
-	}
 
 	if (actual < 0) {
 		fprintf(stderr, "Error: %s\n", strerror(errno));
@@ -483,7 +482,6 @@ void handle_show(int ctrl_sock, char *path, char *address)
 		return;
 	}
 
-	// establish a data connection once we know we can take the file
 	int datafd = est_data_conn(ctrl_sock, address);
 
 	if (datafd == -1)
@@ -519,4 +517,62 @@ void handle_show(int ctrl_sock, char *path, char *address)
 	execlp("more", "more", "-20", (char *) NULL);
 	fprintf(stderr, "Error: %s\n", strerror(errno));
 	exit(errno);
+}
+
+void handle_put(int ctrl_sock, char *path, char *address)
+{
+	if (!path) {
+		fprintf(stderr, "Command error: expecting a parameter.\n");
+		return;
+	}
+
+	if (access(path, R_OK)) {
+		fprintf(stderr, "Put Canceled: %s\n", strerror(errno));
+		return;
+	}
+
+	struct stat s;
+	if (lstat(path, &s)) {
+		fprintf(stderr, "Put Canceled: %s\n", strerror(errno));
+		return;
+	}
+
+	if (!S_ISREG(s.st_mode)) {
+		fprintf(stderr, "Put Canceled: File is not regular\n");
+		return;
+	}
+
+	int openfd = open(path, O_RDONLY);
+
+	if(openfd == -1) {
+		fprintf(stderr, "File Open Error: %s\n", strerror(errno));
+		return;
+	}
+
+	int datafd = est_data_conn(ctrl_sock, address);
+
+	if (datafd == -1)
+		return;
+
+	send_msg(ctrl_sock, 'P', basename(path));
+
+	int error;
+	char res_type;
+	if((error = handle_response(ctrl_sock, &res_type, NULL)))
+		exit(error);
+
+	if(res_type == 'E') {
+		close(datafd);
+		return;
+	}
+
+	int actual;
+	char buffer[READ_BUFFER_SIZE] = {0};
+	while ((actual = read(openfd, buffer, READ_BUFFER_SIZE)) > 0)
+		write(datafd, buffer, actual);
+
+	if (actual < 0)
+		fprintf(stderr, "Read Error: %s\n", strerror(errno));
+
+	close(datafd); close(openfd);
 }

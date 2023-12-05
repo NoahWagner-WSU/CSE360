@@ -5,7 +5,7 @@
 TODO:
 - perhaps add a copy function that reads and writes data from one fd to another
 - add a print(string) function that prints a string of the form, "Child <pid>: <string>"
-	- use this to print info about rcd and other handlers
+	- use this to print various server actions (like rcd, trasmitting data with get, etc.)
 - Do a passthrough of error checking (double check all system call error handling)
 	- waitpid will need more error checking
 	- every "Error: " replace with something better
@@ -299,7 +299,7 @@ void handle_D(int clientfd)
 	} else if (line[0] == 'G') {
 		handle_G(clientfd, datafd, line + 1);
 	} else if (line[0] == 'P') {
-		// handle_P(clientfd, datafd, line + 1);
+		handle_P(clientfd, datafd, line + 1);
 	} else {
 		send_msg(clientfd, 'E',
 		         "Unrecognized control command");
@@ -339,23 +339,25 @@ void handle_G(int clientfd, int datafd, char *path)
 {
 	if (access(path, R_OK)) {
 		send_msg(clientfd, 'E', strerror(errno));
+		close(datafd);
 		return;
 	}
 
 	struct stat s;
 	if (lstat(path, &s)) {
 		send_msg(clientfd, 'E', strerror(errno));
+		close(datafd);
 		return;
 	}
 
 	if (!S_ISREG(s.st_mode)) {
 		send_msg(clientfd, 'E', "File is not regular");
+		close(datafd);
 		return;
 	}
 
 	send_msg(clientfd, 'A', NULL);
 
-	// open the file at path (use open() here)
 	int openfd = open(path, O_RDONLY);
 
 	if(openfd == -1) {
@@ -373,4 +375,31 @@ void handle_G(int clientfd, int datafd, char *path)
 		fprintf(stderr, "Read Error: %s\n", strerror(errno));
 
 	close(datafd);
+}
+
+void handle_P(int clientfd, int datafd, char *path)
+{
+	// check if path is a file name and not a path (use dirname())
+
+	int newfd = open(path, O_CREAT | O_EXCL | O_WRONLY, 0644);
+
+	if(newfd == -1) {
+		send_msg(clientfd, 'E', strerror(errno));
+		close(datafd);
+		return;
+	}
+
+	send_msg(clientfd, 'A', NULL);
+
+	int actual;
+	char buffer[READ_BUFFER_SIZE] = {0};
+	while ((actual = read(datafd, buffer, READ_BUFFER_SIZE)) > 0)
+		write(newfd, buffer, actual);
+
+	if (actual < 0) {
+		fprintf(stderr, "Read Error: %s\n", strerror(errno));
+		unlink(path);
+	}
+
+	close(datafd); close(newfd);
 }
