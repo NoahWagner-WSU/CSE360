@@ -3,6 +3,7 @@
 
 /*
 TODO:
+- Add more print statements
 - Do a passthrough of error checking (double check all system call error handling)
 	- waitpid will need more error checking
 	- every "Error: " replace with something better
@@ -16,7 +17,7 @@ int ctrl_conn_loop(int listenfd);
 
 void handle_Q(int clientfd);
 void handle_C(int clientfd, char *path);
-void handle_D(int clientfd);
+int handle_D(int clientfd);
 void handle_L(int clientfd, int datafd);
 void handle_G(int clientfd, int datafd, char *path);
 void handle_P(int clientfd, int datafd, char *path);
@@ -34,14 +35,33 @@ int main(int argc, char **argv)
 	// we are now in the child process
 
 	char *line;
+	int datafd = -1;
 	while ((line = get_line(clientfd)) != NULL) {
+
+		if ((line[0] == 'L' || line[0] == 'G' || line[0] == 'P') &&
+		    datafd == -1) {
+			send_msg(clientfd, 'E',
+			         "No data connection established");
+			free(line);
+			continue;
+		}
+
 		if (line[0] == 'Q') {
 			free(line);
 			handle_Q(clientfd);
 		} else if (line[0] == 'C') {
 			handle_C(clientfd, line + 1);
 		} else if (line[0] == 'D') {
-			handle_D(clientfd);
+			datafd = handle_D(clientfd);
+		} else if (line[0] == 'L') {
+			handle_L(clientfd, datafd);
+			datafd = -1;
+		} else if (line[0] == 'G') {
+			handle_G(clientfd, datafd, line + 1);
+			datafd = -1;
+		} else if (line[0] == 'P') {
+			handle_P(clientfd, datafd, line + 1);
+			datafd = -1;
 		} else {
 			send_msg(clientfd, 'E',
 			         "Unrecognized control command");
@@ -49,7 +69,10 @@ int main(int argc, char **argv)
 		free(line);
 	}
 
-	return 0;
+	fprintf(stderr,
+	        "Child %d: Failed to read from Control Socket, exiting\n",
+	        getpid());
+	return EXIT_FAILURE;
 }
 
 // NOTE: the source of this function is taken from my assignment 8 source code
@@ -268,14 +291,14 @@ void handle_C(int clientfd, char *path)
 }
 
 // NOTE: error check later
-void handle_D(int clientfd)
+int handle_D(int clientfd)
 {
 	int port_num = 0;
 	int listenfd = init_socket(0, 1, &port_num);
 
 	if (listenfd == -1) {
 		send_msg(clientfd, 'E', "Failed to initialize data socket");
-		return;
+		return -1;
 	}
 
 	// stringify the port number
@@ -289,20 +312,7 @@ void handle_D(int clientfd)
 
 	int datafd = accept(listenfd, (struct sockaddr *) &client_addr,
 	                    (socklen_t *) &length);
-
-	char *line = get_line(clientfd);
-
-	if (line[0] == 'L') {
-		handle_L(clientfd, datafd);
-	} else if (line[0] == 'G') {
-		handle_G(clientfd, datafd, line + 1);
-	} else if (line[0] == 'P') {
-		handle_P(clientfd, datafd, line + 1);
-	} else {
-		send_msg(clientfd, 'E',
-		         "Unrecognized control command");
-	}
-	free(line);
+	return datafd;
 }
 
 void handle_L(int clientfd, int datafd)
@@ -359,7 +369,7 @@ void handle_G(int clientfd, int datafd, char *path)
 
 	int openfd = open(path, O_RDONLY);
 
-	if(openfd == -1) {
+	if (openfd == -1) {
 		fprintf(stderr, "File Open Error: %s\n", strerror(errno));
 		close(datafd);
 		return;
@@ -379,7 +389,7 @@ void handle_P(int clientfd, int datafd, char *path)
 
 	int newfd = open(path, O_CREAT | O_EXCL | O_WRONLY, 0644);
 
-	if(newfd == -1) {
+	if (newfd == -1) {
 		send_msg(clientfd, 'E', strerror(errno));
 		close(datafd);
 		return;

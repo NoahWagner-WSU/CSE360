@@ -2,11 +2,9 @@
 
 /*
 TODO:
-- Any repeated code in put / show / get functions, make into their own functions (same on server)
 - fix all valgrind errors
 - double check all error handling
 	- lots of function calls currently aren't checked if they fail
-- check with prof if the way I wait() in handle_ls is good
 */
 
 // NOTE: code from setup_ctrl_conn, get_server_addr, and connect_to_server is taken from assignment 8
