@@ -4,6 +4,7 @@
 /*
 TODO:
 - Add more print statements
+- Test multiple clients
 - Do a passthrough of error checking (double check all system call error handling)
 	- waitpid will need more error checking
 	- every "Error: " replace with something better
@@ -37,6 +38,14 @@ int main(int argc, char **argv)
 	char *line;
 	int datafd = -1;
 	while ((line = get_line(clientfd)) != NULL) {
+
+		if(line[0] == 'D' && datafd != -1) {
+			fprintf(stderr, 
+			        "Child %d: recieved redundant D command, exiting\n",
+			        getpid());
+			send_msg(clientfd, 'E', "Unexpected D command");
+			exit(EXIT_FAILURE);
+		}
 
 		if ((line[0] == 'L' || line[0] == 'G' || line[0] == 'P') &&
 		    datafd == -1) {
@@ -385,7 +394,17 @@ void handle_G(int clientfd, int datafd, char *path)
 
 void handle_P(int clientfd, int datafd, char *path)
 {
-	// check if path is a file name and not a path (use dirname())
+	char *path_copy = strdup(path);
+	char *dir = dirname(path_copy);
+
+	if(strcmp(dir, ".")) {
+		send_msg(clientfd, 'E', 
+		         "Recieved a path name, base name expected");
+		free(path_copy);
+		return;
+	}
+
+	free(path_copy);
 
 	int newfd = open(path, O_CREAT | O_EXCL | O_WRONLY, 0644);
 
