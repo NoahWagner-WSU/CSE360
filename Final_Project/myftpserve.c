@@ -5,6 +5,7 @@
 TODO:
 - Add more print statements
 - Test multiple clients
+- Fix "control socket closed unexpectedly" after runing show on a large file, pressing q, then running rls (or any data connection command)
 - Do a passthrough of error checking (double check all system call error handling)
 	- waitpid will need more error checking
 	- every "Error: " replace with something better

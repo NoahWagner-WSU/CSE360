@@ -3,6 +3,7 @@
 /*
 TODO:
 - fix all valgrind errors
+- try to fix client crashing when server ^C with no debug error
 - double check all error handling
 	- lots of function calls currently aren't checked if they fail
 */
