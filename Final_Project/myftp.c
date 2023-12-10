@@ -3,9 +3,7 @@
 /*
 TODO:
 - fix all valgrind errors
-- try to fix client crashing when server ^C with no debug error
-- double check all error handling
-	- lots of function calls currently aren't checked if they fail
+- remove comments!
 */
 
 // NOTE: code from setup_ctrl_conn, get_server_addr, and connect_to_server is taken from assignment 8
@@ -36,7 +34,8 @@ int main(int argc, char **argv)
 {
 	// check if any input is received
 	if (argc == 1) {
-		fprintf(stderr, "%s\n", "Error: No server adress specified");
+		fprintf(stderr, "%s\n", 
+		        "Argument Error: No server adress specified");
 		return 1;
 	}
 
@@ -151,7 +150,8 @@ int get_server_addr(const char *address, const char *port,
 
 	// get the address info of the server
 	if ((status = getaddrinfo(address, port, &hints, info)))
-		fprintf(stderr, "Error: %s\n", gai_strerror(status));
+		fprintf(stderr, "Get Address Error: %s\n", 
+		        gai_strerror(status));
 
 	return status;
 }
@@ -166,7 +166,7 @@ int connect_to_server(struct addrinfo *info, int *sockfd)
 
 	// try connecting to the first address returned by getaddrinfo
 	if (connect(*sockfd, info->ai_addr, info->ai_addrlen)) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Connection Error: %s\n", strerror(errno));
 		return errno;
 	}
 
@@ -215,19 +215,20 @@ int handle_response(int ctrl_sock, char *type, char **port)
 	int bytes_read = read(ctrl_sock, type, 1);
 
 	if (bytes_read < 0) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Read Error: %s\n", strerror(errno));
 		exit(errno);
 	}
 
 	if (bytes_read == 0) {
-		fprintf(stderr, "Error: control socket closed unexpectedly\n");
+		fprintf(stderr, 
+		        "Response Error: control socket closed unexpectedly\n");
 		exit(EXIT_FAILURE);
 	}
 
 	char *line = get_line(ctrl_sock);
 
 	if (line == NULL) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Read Error: %s\n", strerror(errno));
 		exit(errno);
 	}
 
@@ -239,7 +240,8 @@ int handle_response(int ctrl_sock, char *type, char **port)
 
 	if (*type != 'A') {
 		fprintf(stderr,
-		        "Error: Unrecognized server response type %c\n", *type);
+		        "Response Error: Unrecognized server response type %c\n",
+		        *type);
 		return -1;
 	}
 
@@ -310,12 +312,14 @@ void handle_cd(char *path)
 	}
 
 	if (access(path, R_OK)) {
-		fprintf(stderr, "Change directory: %s\n", strerror(errno));
+		fprintf(stderr, "Change directory Error: %s\n", 
+		        strerror(errno));
 		return;
 	}
 
 	if (chdir(path)) {
-		fprintf(stderr, "Change directory: %s\n", strerror(errno));
+		fprintf(stderr, "Change directory Error: %s\n", 
+		        strerror(errno));
 		return;
 	}
 }
@@ -339,7 +343,11 @@ void handle_ls()
 	// NOTE: error check later
 	int fd[2];
 	int rdr, wtr;
-	pipe(fd);
+	if(pipe(fd)) {
+		fprintf(stderr, "Fatal Pipe Error: %s, exiting\n", 
+		        strerror(errno));
+		exit(errno);
+	}
 	rdr = fd[0];
 	wtr = fd[1];
 
@@ -350,7 +358,7 @@ void handle_ls()
 		wait(NULL);
 		return;
 	} else if (f1 == -1) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Fork Error: %s\n", strerror(errno));
 		return;
 	}
 
@@ -361,14 +369,14 @@ void handle_ls()
 		// replace stdin with rdr
 		close(0); dup(rdr); close(rdr);
 		execlp("more", "more", "-20", (char *) NULL);
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Exec Error: %s\n", strerror(errno));
 		exit(1);
 	} else if (f2 == 0) {
 		close(rdr);
 		// replace stdout with wtr
 		close(1); dup(wtr); close(wtr);
 		execlp("ls", "ls", "-l", (char *) NULL);
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Exec Error: %s\n", strerror(errno));
 		exit(1);
 	}
 	fprintf(stderr, "Error: %s\n", strerror(errno));
@@ -396,7 +404,7 @@ void handle_rls(int ctrl_sock, char *address)
 		wait(NULL);
 		return;
 	} else if (f1 == -1) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Fork Error: %s\n", strerror(errno));
 		close(datafd);
 		return;
 	}
@@ -404,7 +412,7 @@ void handle_rls(int ctrl_sock, char *address)
 	// replace stdin with datafd
 	close(0); dup(datafd); close(datafd);
 	execlp("more", "more", "-20", (char *) NULL);
-	fprintf(stderr, "Error: %s\n", strerror(errno));
+	fprintf(stderr, "Exec Error: %s\n", strerror(errno));
 	exit(errno);
 }
 
@@ -417,23 +425,20 @@ void handle_get(int ctrl_sock, char *path, char *address)
 
 	char *file_name = basename(path);
 
-	if (access(file_name, F_OK) == 0) {
-		fprintf(stderr,
-		        "Get Canceled: %s already exists in current directory\n",
-		        file_name);
-		return;
-	}
+	int newfd = open(file_name, O_CREAT | O_EXCL | O_WRONLY, 0644);
 
-	if (errno != ENOENT) {
-		fprintf(stderr, "Get Error: %s\n", strerror(errno));
+	if (newfd == -1) {
+		fprintf(stderr, "File Open Error: %s\n", strerror(errno));
 		return;
 	}
 
 	// establish a data connection once we know we can take the file
 	int datafd = est_data_conn(ctrl_sock, address);
 
-	if (datafd == -1)
+	if (datafd == -1) {
+		unlink(file_name); close(newfd);
 		return;
+	}
 
 	int error;
 
@@ -445,20 +450,12 @@ void handle_get(int ctrl_sock, char *path, char *address)
 	handle_response(ctrl_sock, &res_type, NULL);
 
 	if (res_type == 'E') {
-		close(datafd);
-		return;
-	}
-
-	int newfd = open(file_name, O_CREAT | O_EXCL | O_WRONLY, 0644);
-
-	if (newfd == -1) {
-		fprintf(stderr, "File Open Error: %s\n", strerror(errno));
-		close(datafd);
+		close(datafd); unlink(file_name); close(newfd);
 		return;
 	}
 
 	if (copy(datafd, newfd) < 0) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Read Error: %s\n", strerror(errno));
 		unlink(file_name);
 	}
 
@@ -496,7 +493,7 @@ void handle_show(int ctrl_sock, char *path, char *address)
 		wait(NULL);
 		return;
 	} else if (f1 == -1) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Fork Error: %s\n", strerror(errno));
 		close(datafd);
 		return;
 	}
@@ -504,7 +501,7 @@ void handle_show(int ctrl_sock, char *path, char *address)
 	// replace stdin with datafd
 	close(0); dup(datafd); close(datafd);
 	execlp("more", "more", "-20", (char *) NULL);
-	fprintf(stderr, "Error: %s\n", strerror(errno));
+	fprintf(stderr, "Fork Error: %s\n", strerror(errno));
 	exit(errno);
 }
 
@@ -516,18 +513,18 @@ void handle_put(int ctrl_sock, char *path, char *address)
 	}
 
 	if (access(path, R_OK)) {
-		fprintf(stderr, "Put Canceled: %s\n", strerror(errno));
+		fprintf(stderr, "Put Error: %s\n", strerror(errno));
 		return;
 	}
 
 	struct stat s;
 	if (lstat(path, &s)) {
-		fprintf(stderr, "Put Canceled: %s\n", strerror(errno));
+		fprintf(stderr, "Put Error: %s\n", strerror(errno));
 		return;
 	}
 
 	if (!S_ISREG(s.st_mode)) {
-		fprintf(stderr, "Put Canceled: File is not regular\n");
+		fprintf(stderr, "Put Error: File is not regular\n");
 		return;
 	}
 

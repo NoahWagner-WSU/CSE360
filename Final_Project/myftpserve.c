@@ -1,6 +1,6 @@
 #include "myftp.h"
 #define BACK_LOG 4
-#include <signal.h>
+// #include <signal.h>
 /*
 TODO:
 - If ignoring SIGPIPE, don't forget to error check copy()
