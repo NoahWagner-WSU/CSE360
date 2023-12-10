@@ -1,16 +1,8 @@
 #include "myftp.h"
-#define BACK_LOG 4
-// #include <signal.h>
-/*
-TODO:
-- If ignoring SIGPIPE, don't forget to error check copy()
-- Test multiple clients
-- Remove all comments!!!!!
-*/
+#include <signal.h>
 
-// returns -1 on error (sends cooresponding error message to stderr), and socketfd on success
-// if port is 0, assigned_port will be filled with the port chosen by bind()
-// NULL can be passed to assigned_port if you aren't interested in it
+#define BACK_LOG 4
+
 int init_socket(int port, int back_log, int *assigned_port);
 int ctrl_conn_loop(int listenfd);
 
@@ -30,9 +22,6 @@ int main(int argc, char **argv)
 	}
 
 	int clientfd = ctrl_conn_loop(listenfd);
-
-	// This fixes show bug and ^C not printing error message bug (on client)
-	// signal(SIGPIPE, SIG_IGN);
 
 	char *line;
 	int datafd = -1;
@@ -93,31 +82,25 @@ int init_socket(int port, int back_log, int *assigned_port)
 		return -1;
 	}
 
-	// remove port already in use error by setting socket options
 	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
 	    sizeof(int))) {
 		fprintf(stderr, "Socket Option Error: %s\n", strerror(errno));
 		return -1;
 	}
 
-	// set up server adress info
 	struct sockaddr_in serv_addr;
 	memset(&serv_addr, 0, sizeof(serv_addr));
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_port = htons(port);
-	// just use the wildcard IP
 	serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	// bind socket to ip and port
 	if (bind(listenfd, (struct sockaddr *) &serv_addr,
 	                sizeof(serv_addr)) < 0) {
 		fprintf(stderr, "Bind Error: %s\n", strerror(errno));
 		return -1;
 	}
 
-	// retrieve the assigned port
 	if (port == 0) {
-		// set up server adress info
 		struct sockaddr_in serv_addr;
 		memset(&serv_addr, 0, sizeof(serv_addr));
 		int length = sizeof(serv_addr);
@@ -131,7 +114,6 @@ int init_socket(int port, int back_log, int *assigned_port)
 			*assigned_port = ntohs(serv_addr.sin_port);
 	}
 
-	// set socket as listening
 	if (listen(listenfd, back_log)) {
 		fprintf(stderr, "Listen Error: %s\n", strerror(errno));
 		return -1;
@@ -147,12 +129,9 @@ int ctrl_conn_loop(int listenfd)
 	struct sockaddr_in client_addr;
 	int length = sizeof(client_addr);
 
-	// set up daemon behavior
 	while (1) {
-		// clear zombie children
 		while (waitpid(-1, NULL, WNOHANG) > 0);
 
-		// wait for a connection
 		clientfd = accept(listenfd, (struct sockaddr *) &client_addr,
 		                  (socklen_t *) &length);
 
@@ -163,12 +142,10 @@ int ctrl_conn_loop(int listenfd)
 		}
 
 		if (fork()) {
-			// parent doesn't need this
 			close(clientfd);
 			continue;
 		}
 
-		// get the client name from address info
 		char client_name[NI_MAXHOST];
 		int client_entry;
 		client_entry = getnameinfo((struct sockaddr *) &client_addr,
@@ -179,7 +156,6 @@ int ctrl_conn_loop(int listenfd)
 		                           0,
 		                           NI_NUMERICSERV);
 
-		// print client name and total connections if successful
 		if (client_entry) {
 			fprintf(stderr, 
 			        "Child %d Get Name Error: %s, exiting\n",
@@ -195,7 +171,6 @@ int ctrl_conn_loop(int listenfd)
 	}
 }
 
-// function might not be full proof
 char *get_line(int fd)
 {
 	char *result = NULL;
@@ -272,8 +247,12 @@ int copy(int src, int dst)
 {
 	int actual;
 	char buffer[READ_BUFFER_SIZE] = {0};
-	while ((actual = read(src, buffer, READ_BUFFER_SIZE)) > 0)
-		write(dst, buffer, actual);
+	while ((actual = read(src, buffer, READ_BUFFER_SIZE)) > 0) {
+		if(write(dst, buffer, actual) == -1) {
+			fprintf(stderr, "Write Error: %s\n", strerror(errno));
+			break;
+		}
+	}
 	return actual;
 }
 
@@ -309,7 +288,6 @@ void handle_C(int clientfd, char *path)
 	send_msg(clientfd, 'A', NULL);
 }
 
-// NOTE: error check later
 int handle_D(int clientfd)
 {
 	int port_num = 0;
@@ -320,7 +298,6 @@ int handle_D(int clientfd)
 		return -1;
 	}
 
-	// stringify the port number
 	char port[NI_MAXSERV] = {0};
 	sprintf(port, "%d", port_num);
 
@@ -347,7 +324,6 @@ void handle_L(int clientfd, int datafd)
 	send_msg(clientfd, 'A', NULL);
 	printf("Child %d: Sending ls content\n", getpid());
 
-	// NOTE: error check later
 	int f1 = fork();
 
 	if (f1 > 0) {
@@ -360,9 +336,7 @@ void handle_L(int clientfd, int datafd)
 		        strerror(tmp));
 		exit(tmp);
 	}
-
-	// replace stdout with datafd
-	// NOTE: perhaps make this a function called replace(1, datafd) and do error checking in there
+	
 	close(1); dup(datafd); close(datafd);
 	execlp("ls", "ls", "-l", (char *) NULL);
 	int tmp = errno;
@@ -404,8 +378,12 @@ void handle_G(int clientfd, int datafd, char *path)
 
 	printf("Child %d: Transmitting contents of file %s\n", getpid(), path);
 
+	signal(SIGPIPE, SIG_IGN);
+
 	if (copy(openfd, datafd) < 0)
 		fprintf(stderr, "Read Error: %s\n", strerror(errno));
+
+	signal(SIGPIPE, SIG_DFL);
 
 	close(datafd);
 }

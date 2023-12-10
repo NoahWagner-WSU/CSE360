@@ -1,11 +1,5 @@
 #include "myftp.h"
 
-/*
-TODO:
-- fix all valgrind errors
-- remove comments!
-*/
-
 // NOTE: code from setup_ctrl_conn, get_server_addr, and connect_to_server is taken from assignment 8
 int setup_conn(int *fd, const char *address, const char *port);
 int get_server_addr(const char *address, const char *port,
@@ -24,22 +18,16 @@ void handle_put(int ctrl_sock, char *path, char *address);
 
 void handle_command(int ctrl_sock, char *cmd, char *path, char *address);
 
-// fills type and message with response from server
-// type can be filled to be either 'E' or 'A'
-// message can be '\0' or <port number> if 'A', NULL if 'E' (ignored if passed NULL)
-// returns 0 on success, -1 if server unexpectidly closed or invalid type read, and errno if we failed to read
 int handle_response(int ctrl_sock, char *type, char **port);
 
 int main(int argc, char **argv)
 {
-	// check if any input is received
 	if (argc == 1) {
 		fprintf(stderr, "%s\n", 
 		        "Argument Error: No server adress specified");
 		return 1;
 	}
 
-	// stringify the port number
 	char port[NI_MAXSERV] = {0};
 	sprintf(port, "%d", SERVER_PORT);
 
@@ -50,7 +38,6 @@ int main(int argc, char **argv)
 
 	printf("Connected to server %s\n", argv[1]);
 
-	// start command loop here
 	char *line;
 
 	printf("MYFTP> ");
@@ -68,7 +55,6 @@ int main(int argc, char **argv)
 		fflush(stdout);
 	}
 
-	// get_line failed, meaning read() failed
 	fprintf(stderr, "%s\n", strerror(errno));
 	return errno;
 }
@@ -97,7 +83,6 @@ void handle_command(int ctrl_sock, char *cmd, char *path, char *address)
 	}
 }
 
-// function might not be full proof
 char *get_line(int fd)
 {
 	char *result = NULL;
@@ -148,7 +133,6 @@ int get_server_addr(const char *address, const char *port,
 	hints.ai_family = AF_INET;
 	hints.ai_socktype = SOCK_STREAM;
 
-	// get the address info of the server
 	if ((status = getaddrinfo(address, port, &hints, info)))
 		fprintf(stderr, "Get Address Error: %s\n", 
 		        gai_strerror(status));
@@ -164,7 +148,6 @@ int connect_to_server(struct addrinfo *info, int *sockfd)
 	if (*sockfd == -1)
 		return errno;
 
-	// try connecting to the first address returned by getaddrinfo
 	if (connect(*sockfd, info->ai_addr, info->ai_addrlen)) {
 		fprintf(stderr, "Connection Error: %s\n", strerror(errno));
 		return errno;
@@ -211,7 +194,6 @@ int est_data_conn(int ctrl_sock, const char *address)
 
 int handle_response(int ctrl_sock, char *type, char **port)
 {
-	// NOTE: error check later
 	int bytes_read = read(ctrl_sock, type, 1);
 
 	if (bytes_read < 0) {
@@ -289,14 +271,17 @@ int copy(int src, int dst)
 {
 	int actual;
 	char buffer[READ_BUFFER_SIZE] = {0};
-	while ((actual = read(src, buffer, READ_BUFFER_SIZE)) > 0)
-		write(dst, buffer, actual);
+	while ((actual = read(src, buffer, READ_BUFFER_SIZE)) > 0) {
+		if(write(dst, buffer, actual) == -1) {
+			fprintf(stderr, "Write Error: %s\n", strerror(errno));
+			break;
+		}
+	}
 	return actual;
 }
 
 void handle_exit(int ctrl_sock)
 {
-	// NOTE: error check later
 	send_msg(ctrl_sock, 'Q', NULL);
 
 	char type = 0;
@@ -340,7 +325,6 @@ void handle_rcd(int ctrl_sock, char *path)
 // NOTE: code taken from assignment 4
 void handle_ls()
 {
-	// NOTE: error check later
 	int fd[2];
 	int rdr, wtr;
 	if(pipe(fd)) {
@@ -396,7 +380,6 @@ void handle_rls(int ctrl_sock, char *address)
 
 	handle_response(ctrl_sock, &res_type, NULL);
 
-	// NOTE: better error checking later
 	int f1 = fork();
 
 	if (f1 > 0) {
@@ -409,7 +392,6 @@ void handle_rls(int ctrl_sock, char *address)
 		return;
 	}
 
-	// replace stdin with datafd
 	close(0); dup(datafd); close(datafd);
 	execlp("more", "more", "-20", (char *) NULL);
 	fprintf(stderr, "Exec Error: %s\n", strerror(errno));
@@ -432,7 +414,6 @@ void handle_get(int ctrl_sock, char *path, char *address)
 		return;
 	}
 
-	// establish a data connection once we know we can take the file
 	int datafd = est_data_conn(ctrl_sock, address);
 
 	if (datafd == -1) {
@@ -442,10 +423,8 @@ void handle_get(int ctrl_sock, char *path, char *address)
 
 	int error;
 
-	// send 'G' and start reading from datafd
 	send_msg(ctrl_sock, 'G', path);
 
-	// handle server response
 	char res_type;
 	handle_response(ctrl_sock, &res_type, NULL);
 
@@ -474,7 +453,6 @@ void handle_show(int ctrl_sock, char *path, char *address)
 	if (datafd == -1)
 		return;
 
-	// send 'G' and start reading from datafd
 	send_msg(ctrl_sock, 'G', path);
 
 	int error;
@@ -498,7 +476,6 @@ void handle_show(int ctrl_sock, char *path, char *address)
 		return;
 	}
 
-	// replace stdin with datafd
 	close(0); dup(datafd); close(datafd);
 	execlp("more", "more", "-20", (char *) NULL);
 	fprintf(stderr, "Fork Error: %s\n", strerror(errno));
