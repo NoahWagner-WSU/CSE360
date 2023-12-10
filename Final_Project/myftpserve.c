@@ -1,14 +1,10 @@
 #include "myftp.h"
 #define BACK_LOG 4
-
+#include <signal.h>
 /*
 TODO:
-- Add more print statements
+- If ignoring SIGPIPE, don't forget to error check copy()
 - Test multiple clients
-- Fix "control socket closed unexpectedly" after runing show on a large file, pressing q, then running rls (or any data connection command)
-- Do a passthrough of error checking (double check all system call error handling)
-	- waitpid will need more error checking
-	- every "Error: " replace with something better
 */
 
 // returns -1 on error (sends cooresponding error message to stderr), and socketfd on success
@@ -34,7 +30,8 @@ int main(int argc, char **argv)
 
 	int clientfd = ctrl_conn_loop(listenfd);
 
-	// we are now in the child process
+	// This fixes show bug and ^C not printing error message bug (on client)
+	// signal(SIGPIPE, SIG_IGN);
 
 	char *line;
 	int datafd = -1;
@@ -91,14 +88,14 @@ int init_socket(int port, int back_log, int *assigned_port)
 	int listenfd = socket(AF_INET, SOCK_STREAM, 0);
 
 	if (listenfd == -1) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Socket Error: %s\n", strerror(errno));
 		return -1;
 	}
 
 	// remove port already in use error by setting socket options
 	if (setsockopt(listenfd, SOL_SOCKET, SO_REUSEADDR, &(int) {1},
 	    sizeof(int))) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Socket Option Error: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -113,7 +110,7 @@ int init_socket(int port, int back_log, int *assigned_port)
 	// bind socket to ip and port
 	if (bind(listenfd, (struct sockaddr *) &serv_addr,
 	                sizeof(serv_addr)) < 0) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Bind Error: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -125,7 +122,8 @@ int init_socket(int port, int back_log, int *assigned_port)
 		int length = sizeof(serv_addr);
 		if (getsockname(listenfd, (struct sockaddr *) &serv_addr,
 		                (socklen_t *) &length)) {
-			fprintf(stderr, "Error: %s\n", strerror(errno));
+			fprintf(stderr, "Socket Name Error: %s\n", 
+			        strerror(errno));
 			return -1;
 		}
 		if (assigned_port)
@@ -134,7 +132,7 @@ int init_socket(int port, int back_log, int *assigned_port)
 
 	// set socket as listening
 	if (listen(listenfd, back_log)) {
-		fprintf(stderr, "Error: %s\n", strerror(errno));
+		fprintf(stderr, "Listen Error: %s\n", strerror(errno));
 		return -1;
 	}
 
@@ -158,7 +156,8 @@ int ctrl_conn_loop(int listenfd)
 		                  (socklen_t *) &length);
 
 		if (clientfd == -1) {
-			perror("Error: ");
+			fprintf(stderr, "Fatal Accept Error: %s\n", 
+			        strerror(errno));
 			exit(errno);
 		}
 
@@ -181,9 +180,10 @@ int ctrl_conn_loop(int listenfd)
 
 		// print client name and total connections if successful
 		if (client_entry) {
-			fprintf(stderr, "Error: %s\n",
+			fprintf(stderr, 
+			        "Child %d Get Name Error: %s, exiting\n",
+				getpid(),
 			        gai_strerror(client_entry));
-			close(clientfd);
 			exit(client_entry);
 		} else {
 			printf("Child %d: Connection accepted from host %s\n",
@@ -287,12 +287,20 @@ void handle_Q(int clientfd)
 void handle_C(int clientfd, char *path)
 {
 	if (access(path, R_OK)) {
-		send_msg(clientfd, 'E', strerror(errno));
+		int tmp = errno;
+		fprintf(stderr, "Child %d Change Directory Error: %s\n", 
+		        getpid(), 
+		        strerror(tmp));
+		send_msg(clientfd, 'E', strerror(tmp));
 		return;
 	}
 
 	if (chdir(path)) {
-		send_msg(clientfd, 'E', strerror(errno));
+		int tmp = errno;
+		fprintf(stderr, "Child %d Change Directory Error: %s\n", 
+		        getpid(), 
+		        strerror(tmp));
+		send_msg(clientfd, 'E', strerror(tmp));
 		return;
 	}
 
@@ -322,6 +330,12 @@ int handle_D(int clientfd)
 
 	int datafd = accept(listenfd, (struct sockaddr *) &client_addr,
 	                    (socklen_t *) &length);
+	close(listenfd);
+	if (datafd == -1)
+		fprintf(stderr, 
+		        "Child %d Failed to establish Data Connection: %s\n",
+		        getpid(), 
+		        strerror(errno));
 	return datafd;
 }
 
@@ -341,8 +355,9 @@ void handle_L(int clientfd, int datafd)
 		return;
 	} else if (f1 == -1) {
 		int tmp = errno;
-		fprintf(stderr, "Error: %s\n", strerror(tmp));
-		return;
+		fprintf(stderr, "Child %d Fork error: %s\n", getpid(), 
+		        strerror(tmp));
+		exit(tmp);
 	}
 
 	// replace stdout with datafd
@@ -350,7 +365,7 @@ void handle_L(int clientfd, int datafd)
 	close(1); dup(datafd); close(datafd);
 	execlp("ls", "ls", "-l", (char *) NULL);
 	int tmp = errno;
-	fprintf(stderr, "Error: %s\n", strerror(tmp));
+	fprintf(stderr, "Child %d Exec Error: %s\n", getpid(), strerror(tmp));
 	exit(tmp);
 }
 
@@ -380,7 +395,8 @@ void handle_G(int clientfd, int datafd, char *path)
 	int openfd = open(path, O_RDONLY);
 
 	if (openfd == -1) {
-		fprintf(stderr, "File Open Error: %s\n", strerror(errno));
+		fprintf(stderr, "Child %d File Open Error: %s\n", getpid(), 
+		        strerror(errno));
 		close(datafd);
 		return;
 	}
