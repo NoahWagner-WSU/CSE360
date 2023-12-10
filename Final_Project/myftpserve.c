@@ -5,6 +5,7 @@
 TODO:
 - If ignoring SIGPIPE, don't forget to error check copy()
 - Test multiple clients
+- Remove all comments!!!!!
 */
 
 // returns -1 on error (sends cooresponding error message to stderr), and socketfd on success
