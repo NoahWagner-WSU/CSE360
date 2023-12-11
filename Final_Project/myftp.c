@@ -350,14 +350,12 @@ void handle_ls()
 
 	if (f2 > 0) {
 		close(wtr);
-		// replace stdin with rdr
 		close(0); dup(rdr); close(rdr);
 		execlp("more", "more", "-20", (char *) NULL);
 		fprintf(stderr, "Exec Error: %s\n", strerror(errno));
 		exit(1);
 	} else if (f2 == 0) {
 		close(rdr);
-		// replace stdout with wtr
 		close(1); dup(wtr); close(wtr);
 		execlp("ls", "ls", "-l", (char *) NULL);
 		fprintf(stderr, "Exec Error: %s\n", strerror(errno));
