@@ -15,8 +15,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-// move all shared function declarations here
-
 #define SERVER_PORT 49999
 
 #define READ_BUFFER_SIZE 1024
